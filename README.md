@@ -4,8 +4,10 @@
 мониторинг растительности (HV в дБ, cross-ratio, RVI), экспорт в
 GeoTIFF/COG.
 
-**Статус:** experimental MVP (v0.2.0). Совместимость: QGIS 3.28 LTR+ и
-QGIS 4.x (только `qgis.PyQt`).
+**Статус:** experimental MVP (v0.2.1). Совместимость: QGIS 3.28 LTR+ и
+QGIS 4.x (только `qgis.PyQt`). **Валидирован на реальном GCOV-грануле**
+(поиск → скачивание 251.7 МБ с ASF → чтение → индексы; детали —
+`docs/product_notes.md`, раздел «Валидация на реальных данных»).
 
 ## Возможности
 
@@ -24,7 +26,7 @@ QGIS 4.x (только `qgis.PyQt`).
 ## Установка
 
 1. QGIS → **Plugins → Manage and Install Plugins → Install from ZIP** →
-   выбрать `nisar_qgis_plugin_v0.2.0.zip`.
+   выбрать `nisar_qgis_plugin_v0.2.1.zip`.
 2. Появится тулбар «NISAR Vegetation» и пункт меню. Processing-алгоритмы —
    в Toolbox под группой «NISAR Vegetation».
 
@@ -93,8 +95,13 @@ AGENTS.md              # исходное задание
 * ✅ пути слоёв/единицы/CRS — по официальному спецификатору
   JPL D-102274 Rev E и nisar-docs.asf.alaska.edu;
 * ✅ поиск ASF — на живом SearchAPI (2026-09-29);
-* ⚠️ чтение на реальном `.h5` и `NETCDF:`-обход — требуют проверки на
-  машине с QGIS (тест-сценарий в `tests/qgis/README.md`).
+* ✅ **скачивание, чтение и расчёт индексов — на реальном грануле**
+  NISAR GCOV UR (251.7 МБ, frequencyB, V-дуал VHVH+VVVV, EPSG:32605,
+  2026-09-30): статистика чтения совпала с атрибутами файла (< 0.001%),
+  найденные особенности формата закрыты юнит-тестами
+  (`tests/unit/test_real_granule_behaviors.py`);
+* ⚠️ установка в реальный QGIS и `NETCDF:`-обход на GDAL 3.6–3.12 —
+  требуют проверки на машине с QGIS (тест-сценарий в `tests/qgis/README.md`).
 
 ## Ограничения MVP
 

@@ -184,3 +184,86 @@ def gcov_no_georef(tmp_path_factory):
     """Synthetic GCOV without projection attributes."""
     path = tmp_path_factory.mktemp("gcov") / "no_georef.h5"
     return make_synthetic_gcov(path, full_pol=False, with_georef=False)
+
+
+@pytest.fixture(scope="session")
+def gcov_ur_vdual(tmp_path_factory):
+    """Realistic urgent-response GCOV clone: frequencyB, V-dual-pol
+    (VHVH+VVVV), NEGATIVE yCoordinateSpacing (north-up), CRID P05023 —
+    mirrors a real granule verified on 2026-09-28 (see product_notes.md)."""
+    import h5py
+
+    path = tmp_path_factory.mktemp("gcov_ur") / "ur_vdual.h5"
+    with h5py.File(str(path), "w") as f:
+        ident = f.create_group("/science/LSAR/identification")
+        ident["granuleId"] = (
+            "NISAR_L2_UR_GCOV_031_151_A_011_0005_NADV_A_"
+            "20260928T155022_20260928T155037_P05023_F_P_J_001")
+        ident["productType"] = "GCOV"
+        ident["productVersion"] = "1.0.11"
+        ident["productLevel"] = "L2"
+        ident["missionId"] = "NISAR"
+        ident["platformName"] = "NISAR"
+        ident["instrumentName"] = "L-SAR"
+        ident["radarBand"] = "L"
+        ident["lookDirection"] = "Left"
+        ident["orbitPassDirection"] = "Ascending"
+        ident["zeroDopplerStartTime"] = "2026-09-28T15:50:22.000000000"
+        ident["absoluteOrbitNumber"] = np.uint32(6132)
+        ident["trackNumber"] = np.uint32(151)
+        ident["frameNumber"] = np.uint16(11)
+        ident["isGeocoded"] = "True"
+        ident["isUrgentObservation"] = "False"
+        ident["isFullFrame"] = "False"
+        ident["processingType"] = "Nominal"
+        ident["compositeReleaseId"] = "P05023"
+        ident["listOfFrequencies"] = np.array(["B"], dtype="S1")
+
+        grid = f.create_group("/science/LSAR/GCOV/grids/frequencyB")
+
+        def add_cov(name, data):
+            ds = grid.create_dataset(name, data=data, dtype="f4")
+            ds.attrs["units"] = "1"
+            ds.attrs["_FillValue"] = np.float32("nan")
+            ds.attrs["grid_mapping"] = "projection"
+            return ds
+
+        add_cov("VHVH", _arr_hvhv())
+        add_cov("VVVV", _arr_vvvv())
+
+        mask = np.zeros((H, W), dtype=np.uint8)
+        mask[0, :] = 255
+        mask[:, -1] = 255
+        mds = grid.create_dataset("mask", data=mask, dtype="u1")
+        mds.attrs["_FillValue"] = np.uint8(255)
+
+        # Real-product layout: x ascending, y descending, spacing SIGNED.
+        xs = X0 + DX * np.arange(W, dtype=np.float64)
+        ys = Y0 - DY * np.arange(H, dtype=np.float64)
+        grid.create_dataset("xCoordinates", data=xs)
+        grid.create_dataset("yCoordinates", data=ys)
+        grid.create_dataset("xCoordinateSpacing", data=np.float64(DX))
+        grid.create_dataset("yCoordinateSpacing", data=np.float64(-DY))
+
+        proj = grid.create_dataset("projection", data=np.uint32(32605))
+        proj.attrs["epsg_code"] = "32605"
+        proj.attrs["spatial_ref"] = (
+            'PROJCS["WGS 84 / UTM zone 5N",GEOGCS["WGS 84",'
+            'DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563,'
+            'AUTHORITY["EPSG","7030"]],AUTHORITY["EPSG","6326"]],'
+            'PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],'
+            'UNIT["degree",0.0174532925199433],AUTHORITY["EPSG","4326"]],'
+            'PROJECTION["Transverse_Mercator"],'
+            'PARAMETER["latitude_of_origin",0],'
+            'PARAMETER["central_meridian",-153],'
+            'PARAMETER["scale_factor",0.9996],'
+            'PARAMETER["false_easting",500000],'
+            'PARAMETER["false_northing",0],UNIT["metre",1],'
+            'AUTHORITY["EPSG","9001"]],AUTHORITY["EPSG","32605"]]')
+
+        grid.create_dataset("listOfPolarizations",
+                            data=np.array(["VH", "VV"], dtype="S2"))
+        grid.create_dataset("listOfCovarianceTerms",
+                            data=np.array(["VHVH", "VVVV"], dtype="S4"))
+
+    return str(path)

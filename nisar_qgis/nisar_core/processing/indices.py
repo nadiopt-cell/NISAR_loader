@@ -58,6 +58,33 @@ def _safe_log10(data: np.ndarray) -> np.ndarray:
     return out
 
 
+# =====================================================================
+# Polarization-generic layer selection.
+# Real NISAR GCOV products may transmit H (HHHH+HVHV) or V (VVVV+VHVH)
+# depending on the observation mode — verified on a real UR granule
+# (frequencyB, listOfPolarizations=[VH, VV]). Vegetation indices only
+# need the cross-pol and co-pol layers, whichever orientation they have.
+# =====================================================================
+CROSS_POL_LAYER_NAMES = ("HVHV", "VHVH")   # cross-pol diagonal terms
+CO_POL_LAYER_NAMES = ("HHHH", "VVVV")      # co-pol diagonal terms
+
+
+def _find_cross_pol_layer(backend, handle: ProductHandle):
+    for name in CROSS_POL_LAYER_NAMES:
+        layer = backend._find_layer(handle, name)
+        if layer is not None:
+            return layer
+    return None
+
+
+def _find_co_pol_layer(backend, handle: ProductHandle):
+    for name in CO_POL_LAYER_NAMES:
+        layer = backend._find_layer(handle, name)
+        if layer is not None:
+            return layer
+    return None
+
+
 class NumpyProcessingBackend:
     """NumPy windowed processing for vegetation indices."""
 
@@ -119,12 +146,14 @@ class NumpyProcessingBackend:
     def compute_hv_db(self, handle: ProductHandle, layer_name: str = "HVHV",
                       window: Optional[Tuple[int, int, int, int]] = None
                       ) -> IndexResult:
-        """HV in dB: 10*log10(HVHV), zero/NaN protected."""
+        """Cross-pol backscatter in dB: 10*log10(HVHV or VHVH)."""
         reader = self._get_reader(handle)
-        layer = (self._find_layer(handle, layer_name, Polarization.HVHV)
-                 or self._find_layer(handle, layer_name))
+        # Explicit layer wins; otherwise any cross-pol diagonal term.
+        layer = (self._find_layer(handle, layer_name)
+                 or _find_cross_pol_layer(self, handle))
         if not layer:
-            raise ValueError("HVHV layer not found in product")
+            raise ValueError(
+                "No cross-polarization layer found (looked for HVHV / VHVH)")
 
         if window:
             data = np.asarray(reader.read_window(handle, layer.name, window),
@@ -140,8 +169,9 @@ class NumpyProcessingBackend:
             data=db_data,
             nodata_mask=nodata_mask,
             units="dB",
-            description="Cross-polarization HV backscatter in decibels",
-            formula_used="10 * log10(HVHV) [gamma0 linear -> dB]",
+            description="Cross-polarization (%s) backscatter in decibels"
+                        % layer.name,
+            formula_used="10 * log10(%s) [gamma0 linear -> dB]" % layer.name,
         )
 
     # ----------------------------------------------------------- cross_ratio
@@ -149,37 +179,45 @@ class NumpyProcessingBackend:
                             hv_layer: str = "HVHV", hh_layer: str = "HHHH",
                             window: Optional[Tuple[int, int, int, int]] = None
                             ) -> IndexResult:
-        """Cross-ratio HV/HH in dB == HV_dB - HH_dB."""
+        """Cross/co-pol ratio in dB == cross_dB - co_dB."""
         reader = self._get_reader(handle)
-        hv = (self._find_layer(handle, hv_layer, Polarization.HVHV)
-              or self._find_layer(handle, hv_layer))
-        hh = (self._find_layer(handle, hh_layer, Polarization.HHHH)
-              or self._find_layer(handle, hh_layer))
-        if not hv or not hh:
+        cross = (self._find_layer(handle, hv_layer)
+                 or _find_cross_pol_layer(self, handle))
+        co = (self._find_layer(handle, hh_layer)
+              or _find_co_pol_layer(self, handle))
+        if not cross or not co:
             raise ValueError(
-                "Cross-ratio requires HVHV and HHHH layers "
-                "(got HV=%s, HH=%s)" % (bool(hv), bool(hh)))
+                "Cross-ratio requires a cross-pol (HVHV/VHVH) and a co-pol "
+                "(HHHH/VVVV) layer (got cross=%s, co=%s)"
+                % (bool(cross), bool(co)))
 
         if window:
-            hv_data = np.asarray(reader.read_window(handle, hv.name, window),
-                                 dtype=np.float64)
-            hh_data = np.asarray(reader.read_window(handle, hh.name, window),
-                                 dtype=np.float64)
+            cross_data = np.asarray(
+                reader.read_window(handle, cross.name, window),
+                dtype=np.float64)
+            co_data = np.asarray(
+                reader.read_window(handle, co.name, window),
+                dtype=np.float64)
         else:
-            hv_data = np.asarray(self._read_full_tiled(handle, hv.name, reader),
-                                 dtype=np.float64)
-            hh_data = np.asarray(self._read_full_tiled(handle, hh.name, reader),
-                                 dtype=np.float64)
+            cross_data = np.asarray(
+                self._read_full_tiled(handle, cross.name, reader),
+                dtype=np.float64)
+            co_data = np.asarray(
+                self._read_full_tiled(handle, co.name, reader),
+                dtype=np.float64)
 
-        ratio_db = (_safe_log10(hv_data) - _safe_log10(hh_data)).astype(np.float32)
+        ratio_db = (_safe_log10(cross_data)
+                    - _safe_log10(co_data)).astype(np.float32)
         nodata_mask = ~np.isfinite(ratio_db)
 
         return IndexResult(
             data=ratio_db,
             nodata_mask=nodata_mask,
             units="dB",
-            description="Cross-ratio HV/HH in decibels",
-            formula_used="10*log10(HVHV) - 10*log10(HHHH)",
+            description="Cross/co-pol ratio (%s/%s) in decibels"
+                        % (cross.name, co.name),
+            formula_used="10*log10(%s) - 10*log10(%s)"
+                         % (cross.name, co.name),
         )
 
     # ----------------------------------------------------------- rvi
@@ -188,15 +226,14 @@ class NumpyProcessingBackend:
                     ) -> IndexResult:
         """RVI; formula auto-selected from available polarizations."""
         reader = self._get_reader(handle)
-        hv = self._find_layer(handle, "HVHV", Polarization.HVHV)
-        hh = self._find_layer(handle, "HHHH", Polarization.HHHH)
-        vv = self._find_layer(handle, "VVVV", Polarization.VVVV)
-        vh = self._find_layer(handle, "VHVH", Polarization.VHVH)
+        cross = _find_cross_pol_layer(self, handle)
+        co_h = self._find_layer(handle, "HHHH")
+        co_v = self._find_layer(handle, "VVVV")
 
-        if not hv:
-            raise ValueError("RVI requires an HV layer (HVHV)")
-        full_pol = (hh is not None and (vv is not None or vh is not None)
-                    and vv is not None)
+        if not cross:
+            raise ValueError(
+                "RVI requires a cross-pol layer (HVHV or VHVH)")
+        full_pol = co_h is not None and co_v is not None
 
         def read(layer):
             if window:
@@ -205,22 +242,24 @@ class NumpyProcessingBackend:
             return np.asarray(self._read_full_tiled(handle, layer.name, reader),
                               dtype=np.float64)
 
-        hv_data = read(hv)
-        if full_pol and vv is not None:
-            co_data = read(vv) if vv is not None else read(hh)
-            # Full-pol: 8*HV / (HH + VV + 2*HV)
-            denominator = (co_data if hh is None else read(hh)) + co_data \
-                + 2.0 * hv_data
-            numerator = 8.0 * hv_data
-            formula = "8*HV / (HH + VV + 2*HV) [full-pol]"
-        elif hh is not None:
-            # Dual-pol: 4*HV / (HH + HV)
-            denominator = read(hh) + hv_data
-            numerator = 4.0 * hv_data
-            formula = "4*HV / (HH + HV) [dual-pol]"
+        cross_data = read(cross)
+        if full_pol:
+            # Full-pol: 8*cross / (coH + coV + 2*cross)
+            denominator = read(co_h) + read(co_v) + 2.0 * cross_data
+            numerator = 8.0 * cross_data
+            formula = "8*%s / (%s + %s + 2*%s) [full-pol]" % (
+                cross.name, co_h.name, co_v.name, cross.name)
         else:
-            raise ValueError(
-                "RVI needs HH (dual-pol) or HH+VV (full-pol) in addition to HV")
+            co = co_h if co_h is not None else co_v
+            if co is None:
+                raise ValueError(
+                    "RVI needs a co-pol layer (HHHH or VVVV) in addition "
+                    "to the cross-pol layer")
+            # Dual-pol: 4*cross / (co + cross)
+            denominator = read(co) + cross_data
+            numerator = 4.0 * cross_data
+            formula = "4*%s / (%s + %s) [dual-pol]" % (
+                cross.name, co.name, cross.name)
 
         with np.errstate(divide="ignore", invalid="ignore"):
             rvi = numerator / np.where(denominator > 0, denominator, np.nan)
@@ -300,49 +339,56 @@ def compute_index_to_raster(handle: ProductHandle, index_id: str,
             error_message=("Product has no valid georeference; refusing to "
                            "write a geo-referenced raster from it"))
 
-    # Collect required layers per index.
+    # Collect required layers per index (polarization-generic: cross-pol =
+    # HVHV or VHVH, co-pol = HHHH or VVVV — see real-granule note above).
     layers: Dict[str, LayerInfo] = {}
     if index_id == VegetationIndex.HV_DB:
-        layer = backend._find_layer(handle, "HVHV", Polarization.HVHV)
+        layer = _find_cross_pol_layer(backend, handle)
         if not layer:
-            return ProcessingResult(success=False,
-                                    error_message="HVHV layer not found")
+            return ProcessingResult(
+                success=False,
+                error_message="No cross-pol layer found (HVHV / VHVH)")
         layers["hv"] = layer
     elif index_id == VegetationIndex.CROSS_RATIO:
-        hv = backend._find_layer(handle, "HVHV", Polarization.HVHV)
-        hh = backend._find_layer(handle, "HHHH", Polarization.HHHH)
-        if not hv or not hh:
-            missing = [n for n, l in (("HVHV", hv), ("HHHH", hh)) if not l]
+        cross = _find_cross_pol_layer(backend, handle)
+        co = _find_co_pol_layer(backend, handle)
+        if not cross or not co:
             return ProcessingResult(
                 success=False,
-                error_message="Cross-ratio requires HVHV and HHHH "
-                              "(missing: %s)" % ", ".join(missing))
-        layers["hv"], layers["hh"] = hv, hh
+                error_message="Cross-ratio requires a cross-pol "
+                              "(HVHV/VHVH) and a co-pol (HHHH/VVVV) layer")
+        layers["hv"], layers["hh"] = cross, co
     elif index_id == VegetationIndex.RVI:
-        hv = backend._find_layer(handle, "HVHV", Polarization.HVHV)
-        hh = backend._find_layer(handle, "HHHH", Polarization.HHHH)
-        vv = backend._find_layer(handle, "VVVV", Polarization.VVVV)
-        if not hv or not hh:
+        cross = _find_cross_pol_layer(backend, handle)
+        co_h = backend._find_layer(handle, "HHHH")
+        co_v = backend._find_layer(handle, "VVVV")
+        if not cross or not (co_h or co_v):
             return ProcessingResult(
                 success=False,
-                error_message="RVI requires at least HVHV and HHHH layers")
-        layers["hv"], layers["hh"] = hv, hh
-        if vv is not None:
-            layers["vv"] = vv
+                error_message="RVI requires a cross-pol layer (HVHV/VHVH) "
+                              "and a co-pol layer (HHHH/VVVV)")
+        layers["hv"], layers["hh"] = cross, (co_h if co_h else co_v)
+        if co_h is not None and co_v is not None:
+            layers["vv"] = co_v
     else:
         return ProcessingResult(success=False,
                                 error_message="Unknown index id %r" % index_id)
 
-    # Determine formula for RVI (displayed to the user).
+    # Determine formula (displayed to the user; real layer names).
     formula = ""
     if index_id == VegetationIndex.HV_DB:
-        formula = "10 * log10(HVHV)"
+        formula = "10 * log10(%s)" % layers["hv"].name
     elif index_id == VegetationIndex.CROSS_RATIO:
-        formula = "10*log10(HVHV) - 10*log10(HHHH)"
+        formula = "10*log10(%s) - 10*log10(%s)" % (layers["hv"].name,
+                                                   layers["hh"].name)
     elif index_id == VegetationIndex.RVI:
-        formula = ("8*HV / (HH + VV + 2*HV) [full-pol]"
-                   if "vv" in layers else
-                   "4*HV / (HH + HV) [dual-pol]")
+        if "vv" in layers:
+            formula = "8*%s / (%s + %s + 2*%s) [full-pol]" % (
+                layers["hv"].name, layers["hh"].name, layers["vv"].name,
+                layers["hv"].name)
+        else:
+            formula = "4*%s / (%s + %s) [dual-pol]" % (
+                layers["hv"].name, layers["hh"].name, layers["hv"].name)
 
     height, width = layers["hv"].shape
     exporter = ExportBackend(dict(config, cog=cog))

@@ -294,10 +294,11 @@ class B2ASFSearchBackend(BaseAccessBackend):
 
         try:
             report("downloading", 0)
-            # asf_search's download_url honours ~/.netrc sessions.
+            # asf_search's download_url streams via the session; auth is
+            # whatever the session carries (netrc / token / cookies).
             asf.download_url(
                 url=url, path=str(output_dir), session=self.session,
-                filetype="h5",
+                filename=filename,
             )
             if not output_path.exists():
                 # File name from URL may differ — accept any new .h5.
@@ -311,10 +312,17 @@ class B2ASFSearchBackend(BaseAccessBackend):
             return output_path
         except Exception as exc:
             report("failed", 0, scene.size_bytes, error=str(exc))
+            # Hint about credentials only when the failure smells auth-ish;
+            # a kwarg/typo error must not send the user chasing .netrc.
+            blob = str(exc).lower()
+            authy = any(w in blob for w in (
+                "401", "403", "unauthorized", "forbidden", "login",
+                "credentials", "netrc", "redirect"))
+            hint = (" Hint: check your Earthdata credentials (~/.netrc "
+                    "with machine urs.earthdata.nasa.gov, or a valid EDL "
+                    "token)." if authy else "")
             raise RuntimeError(
-                "Download failed for %s: %s. Hint: check your ~/.netrc "
-                "Earthdata credentials (machine urs.earthdata.nasa.gov)."
-                % (scene.scene_id, exc))
+                "Download failed for %s: %s.%s" % (scene.scene_id, exc, hint))
 
     def get_local_path(self, scene: SceneRecord) -> Optional[Path]:
         download_dir = Path(self.config.get(

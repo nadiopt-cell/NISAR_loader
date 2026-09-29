@@ -95,6 +95,7 @@ class A3H5PyReader(BaseReader):
             layers = self._extract_layers(h5, instrument, product)
             georef = self._extract_georef(h5, instrument, product)
             identification = self._extract_identification(h5, instrument)
+            data_status = self._detect_data_status(identification)
             handle = ProductHandle(
                 source_path=path,
                 reader_backend=self.BACKEND_ID,
@@ -102,10 +103,10 @@ class A3H5PyReader(BaseReader):
                 georef=georef,
                 metadata={
                     "identification": identification,
-                    "data_status": DataStatus.UNKNOWN.value,  # see product_notes.md
+                    "data_status": data_status.value,
                 },
                 product_type=self._to_product_type(product),
-                data_status=DataStatus.UNKNOWN,
+                data_status=data_status,
             )
             # Keep the open file for windowed reads (closed by close()).
             handle._h5_file = h5
@@ -213,12 +214,23 @@ class A3H5PyReader(BaseReader):
 
             width, height = int(xs.size), int(ys.size)
 
-            dx = float(group["xCoordinateSpacing"][()]) \
-                if "xCoordinateSpacing" in group else float(abs(xs[1] - xs[0]))
-            dy = float(group["yCoordinateSpacing"][()]) \
-                if "yCoordinateSpacing" in group else float(abs(ys[1] - ys[0]))
-            if dx <= 0 or dy <= 0:
+            # Spacing datasets may be SIGNED: real GCOV products store a
+            # negative yCoordinateSpacing for north-up grids (y descends) —
+            # verified on a real UR granule (-80 m). Use magnitudes here;
+            # orientation is derived from the coordinate arrays below.
+            dx_signed = (float(group["xCoordinateSpacing"][()])
+                         if "xCoordinateSpacing" in group
+                         else float(xs[1] - xs[0]))
+            dy_signed = (float(group["yCoordinateSpacing"][()])
+                         if "yCoordinateSpacing" in group
+                         else float(ys[0] - ys[-1]) / max(ys.size - 1, 1))
+            dx, dy = abs(dx_signed), abs(dy_signed)
+            if dx <= 0 or dy <= 0 or not np.isfinite(dx) or not np.isfinite(dy):
                 warnings.append("%s: non-positive pixel spacing" % group_path)
+                continue
+            if xs[0] > xs[-1]:
+                warnings.append("%s: descending xCoordinates are not "
+                                "supported yet" % group_path)
                 continue
 
             # CF convention: coordinate variables are pixel centers.
@@ -231,8 +243,10 @@ class A3H5PyReader(BaseReader):
                              float(ys[0]) - dy / 2.0, 0.0, dy]
 
             crs_wkt, auth_id = self._read_projection(group)
+            group_warnings = [w for w in warnings
+                              if w.startswith(group_path)]
             if not auth_id:
-                warnings.append("CRS authority code not recognized")
+                group_warnings.append("CRS authority code not recognized")
 
             ulx, xres, _, uly, _, yres = transform
             lrx = ulx + width * xres
@@ -246,8 +260,8 @@ class A3H5PyReader(BaseReader):
                 width=width,
                 height=height,
                 bbox=bbox,
-                is_valid=bool(crs_wkt or auth_id) and not warnings,
-                warnings=warnings,
+                is_valid=bool(crs_wkt or auth_id) and not group_warnings,
+                warnings=group_warnings,
             )
 
         return GeorefInfo(
@@ -298,6 +312,32 @@ class A3H5PyReader(BaseReader):
             return ProductType(product.upper())
         except ValueError:
             return None
+
+    @staticmethod
+    def _detect_data_status(identification: Dict[str, Any]) -> DataStatus:
+        """Best-effort calibration status from compositeReleaseId.
+
+        NISAR processing campaigns encode the status in the first letter of
+        the CRID (e.g. ``B05021`` = BETA, ``P05023`` = PROVISIONAL —
+        verified on a real granule) and in ``productVersion``. UNKNOWN
+        when nothing recognizable is present (the GUI then warns).
+        """
+        crid = str(identification.get("compositeReleaseId", "")).strip().upper()
+        if crid.startswith("B"):
+            return DataStatus.BETA
+        if crid.startswith("P"):
+            return DataStatus.PROVISIONAL
+        if crid.startswith("V"):
+            return DataStatus.VALIDATED
+        blob = ("%s %s" % (identification.get("processingType", ""),
+                           identification.get("productVersion", ""))).upper()
+        if "BETA" in blob:
+            return DataStatus.BETA
+        if "PROVISIONAL" in blob or "URGENT" in blob:
+            return DataStatus.PROVISIONAL
+        if "VALIDATED" in blob:
+            return DataStatus.VALIDATED
+        return DataStatus.UNKNOWN
 
     # ---------------------------------------------------------- read/close
     def read_window(self, handle: ProductHandle, layer_name: str,
