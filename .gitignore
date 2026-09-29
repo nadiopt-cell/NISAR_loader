@@ -29,3 +29,14 @@ nisar_qgis/cache/
 .idea/
 .vscode/
 *.swp
+
+# Credentials & secrets — never commit (Earthdata Login / EDL tokens / .netrc)
+.env
+.env.*
+edl_*
+*credentials*
+*.netrc
+_netrc
+cookies*.txt
+token*.txt
+secrets/
