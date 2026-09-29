@@ -39,13 +39,15 @@ PROCESSING_LEVEL_MAP = {
     ProductType.GCOV: "GCOV",
     ProductType.GSLC: "GSLC",
     ProductType.RSLC: "RSLC",
+    ProductType.GUNW: "GUNW",
 }
 
-# CMR concept IDs verified via live search metadata (2026-09-29).
+# CMR concept IDs verified via live search metadata (2026-09-29/30).
 CONCEPT_IDS = {
     ProductType.GCOV: "C2854338529-ASF",   # NISAR_L2_GCOV_PROVISIONAL_V1
     ProductType.GSLC: None,                # not verified yet
     ProductType.RSLC: None,                # not verified yet
+    ProductType.GUNW: "C2854335566-ASF",   # NISAR_L2_GUNW_PROVISIONAL_V1
 }
 
 _POLARIZATION_CODES = {

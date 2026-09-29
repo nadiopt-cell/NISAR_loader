@@ -37,7 +37,7 @@ from ..nisar_core.presets import PRESETS, get_preset, list_presets
 from ..nisar_core.access.preview import scene_summary_pairs
 from .tasks import (
     NisarSearchTask, NisarDownloadTask, NisarComputeTask, NisarExportTask,
-    NisarPreviewTask,
+    NisarPreviewTask, NisarWindthrowTask,
 )
 
 logger = logging.getLogger("nisar.gui.dialog")
@@ -92,6 +92,7 @@ class NisarMainDialog(QDialog):
         self.tab_download = self._create_download_tab()
         self.tab_open = self._create_open_tab()
         self.tab_process = self._create_process_tab()
+        self.tab_windthrow = self._create_windthrow_tab()
         self.tab_export = self._create_export_tab()
         self.tab_settings = self._create_settings_tab()
 
@@ -100,6 +101,7 @@ class NisarMainDialog(QDialog):
                 (self.tab_download, "ui.tab_download"),
                 (self.tab_open, "ui.tab_open"),
                 (self.tab_process, "ui.tab_process"),
+                (self.tab_windthrow, "ui.tab_windthrow"),
                 (self.tab_export, "ui.tab_export"),
                 (self.tab_settings, "ui.tab_settings")):
             idx = self.tabs.addTab(widget, key)
@@ -337,6 +339,256 @@ class NisarMainDialog(QDialog):
         layout.addWidget(preset_panel, 2)
         layout.addWidget(detail_panel, 3)
         return widget
+
+    # ---------------------------------------------------------- Windthrow
+    def _create_windthrow_tab(self) -> QWidget:
+        """Windthrow DiD tab (P3): storm + control GUNW pair -> dcoh."""
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+
+        group = QGroupBox()
+        self._bind(group, "ui.windthrow.title", "title")
+        form = QFormLayout(group)
+
+        self.wt_storm_path = QLineEdit()
+        self.wt_storm_path.setPlaceholderText(
+            tr("ui.windthrow.storm_placeholder"))
+        wt_storm_btn = QPushButton("…")
+        wt_storm_btn.clicked.connect(
+            lambda: self._browse_h5_into(self.wt_storm_path))
+        storm_row = QHBoxLayout()
+        storm_row.addWidget(self.wt_storm_path, 1)
+        storm_row.addWidget(wt_storm_btn)
+        form.addRow(tr("ui.windthrow.storm"), storm_row)
+
+        self.wt_control_path = QLineEdit()
+        self.wt_control_path.setPlaceholderText(
+            tr("ui.windthrow.control_placeholder"))
+        wt_control_btn = QPushButton("…")
+        wt_control_btn.clicked.connect(
+            lambda: self._browse_h5_into(self.wt_control_path))
+        control_row = QHBoxLayout()
+        control_row.addWidget(self.wt_control_path, 1)
+        control_row.addWidget(wt_control_btn)
+        form.addRow(tr("ui.windthrow.control"), control_row)
+
+        self.wt_event_date = QLineEdit()
+        self.wt_event_date.setPlaceholderText("YYYY-MM-DD")
+        form.addRow(tr("ui.windthrow.event_date"), self.wt_event_date)
+
+        self.wt_k_mad = QLineEdit("0.25")
+        form.addRow(tr("ui.windthrow.k_mad"), self.wt_k_mad)
+        self.wt_min_pixels = QLineEdit("6")
+        form.addRow(tr("ui.windthrow.min_pixels"), self.wt_min_pixels)
+
+        self.wt_forest_chk = QCheckBox()
+        self._bind(self.wt_forest_chk, "ui.windthrow.forest_mask", "text")
+        self.wt_forest_chk.setChecked(True)
+        form.addRow(self.wt_forest_chk)
+
+        self.wt_polygonize_chk = QCheckBox()
+        self._bind(self.wt_polygonize_chk, "ui.windthrow.polygonize", "text")
+        form.addRow(self.wt_polygonize_chk)
+
+        self.wt_output_dir = QLineEdit()
+        wt_dir_btn = QPushButton("…")
+        wt_dir_btn.clicked.connect(self._browse_wt_output_dir)
+        dir_row = QHBoxLayout()
+        dir_row.addWidget(self.wt_output_dir, 1)
+        dir_row.addWidget(wt_dir_btn)
+        form.addRow(tr("ui.windthrow.output_dir"), dir_row)
+
+        self.wt_run_btn = QPushButton()
+        self._bind(self.wt_run_btn, "ui.windthrow.run", "text")
+        self.wt_run_btn.setStyleSheet("font-weight: bold;")
+        self.wt_run_btn.clicked.connect(self._on_windthrow_clicked)
+        form.addRow(self.wt_run_btn)
+
+        self.wt_status = QLabel()
+        self.wt_status.setWordWrap(True)
+        form.addRow(self.wt_status)
+
+        layout.addWidget(group)
+
+        self.wt_report = QTextBrowser()
+        self.wt_report.setOpenExternalLinks(False)
+        self._bind(self.wt_report, "ui.windthrow.report_hint", "plainText")
+        layout.addWidget(self.wt_report, 1)
+        return widget
+
+    def _browse_h5_into(self, line_edit: QLineEdit):
+        path, _ = QFileDialog.getOpenFileName(
+            self, tr("ui.open.file_label"), "",
+            "NISAR products (*.h5 *.hdf5 *.he5);;All files (*)")
+        if path:
+            line_edit.setText(path)
+
+    def _browse_wt_output_dir(self):
+        path = QFileDialog.getExistingDirectory(
+            self, tr("ui.windthrow.output_dir"))
+        if path:
+            self.wt_output_dir.setText(path)
+
+    def _on_windthrow_clicked(self):
+        from ..nisar_core.processing.windthrow import (
+            WindthrowParams, check_pair_compatibility,
+        )
+        storm = self.wt_storm_path.text().strip()
+        control = self.wt_control_path.text().strip()
+        if not storm or not os.path.isfile(storm):
+            QMessageBox.warning(self, tr("ui.error"),
+                                tr("ui.windthrow.no_storm"))
+            return
+        if not control or not os.path.isfile(control):
+            QMessageBox.warning(self, tr("ui.error"),
+                                tr("ui.windthrow.no_control"))
+            return
+
+        event_date = None
+        date_str = self.wt_event_date.text().strip()
+        if date_str:
+            try:
+                event_date = datetime.strptime(date_str[:10], "%Y-%m-%d")
+            except ValueError:
+                QMessageBox.warning(
+                    self, tr("ui.error"),
+                    tr("ui.windthrow.bad_date").format(value=date_str))
+                return
+
+        # quick pair compatibility pre-check (opens both files briefly)
+        try:
+            handle_s = ReaderRegistry.open(
+                storm, config=config_as_dict(self.config))
+            try:
+                handle_c = ReaderRegistry.open(
+                    control, config=config_as_dict(self.config))
+                try:
+                    compat = check_pair_compatibility(
+                        handle_s, handle_c, event_date)
+                finally:
+                    ReaderRegistry.close(handle_c)
+            finally:
+                ReaderRegistry.close(handle_s)
+        except Exception as exc:
+            QMessageBox.critical(
+                self, tr("ui.error"),
+                tr("ui.windthrow.open_failed").format(error=exc))
+            return
+        if not compat.compatible:
+            QMessageBox.warning(
+                self, tr("ui.warning"),
+                tr("ui.windthrow.incompatible").format(
+                    issues="; ".join(compat.issues)))
+            return
+        for warning in compat.warnings:
+            self.wt_status.setText(
+                tr("ui.windthrow.pair_warning").format(warning=warning))
+
+        try:
+            params = WindthrowParams(
+                k_mad=float(self.wt_k_mad.text().strip() or 0.25),
+                min_pixels=int(self.wt_min_pixels.text().strip() or 6))
+        except ValueError:
+            QMessageBox.warning(self, tr("ui.error"),
+                                tr("ui.windthrow.bad_params"))
+            return
+
+        output_dir = self.wt_output_dir.text().strip()
+        if not output_dir:
+            output_dir = str(Path(self.config.download_dir) / "windthrow")
+        Path(output_dir).mkdir(parents=True, exist_ok=True)
+
+        task = NisarWindthrowTask(
+            storm, control, output_dir,
+            config=config_as_dict(self.config),
+            params=params,
+            event_date=event_date,
+            polygonize=self.wt_polygonize_chk.isChecked(),
+            build_forest_mask=self.wt_forest_chk.isChecked())
+        task.signals.finished_ok.connect(
+            lambda result, t=task: self._on_windthrow_done(t, result))
+        task.signals.finished_error.connect(self._on_windthrow_error)
+        self._tasks.append(task)
+        self.wt_run_btn.setEnabled(False)
+        self.wt_status.setText(tr("ui.windthrow.running"))
+        self.wt_report.setPlainText("")
+        from qgis.core import QgsApplication
+        QgsApplication.taskManager().addTask(task)
+
+    def _on_windthrow_done(self, task, result):
+        self.wt_run_btn.setEnabled(True)
+        if not result.success:
+            self._on_windthrow_error(result.error_message or "failed")
+            return
+        self.wt_status.setText(tr("ui.windthrow.done"))
+        report = result.metadata or {}
+        self.wt_report.setPlainText(self._format_windthrow_report(report))
+
+        # add outputs to the project
+        for path in result.output_paths:
+            if path.endswith("dcoh.tif"):
+                self._add_raster_layer(path, "NISAR dcoh (DiD)",
+                                       "Windthrow")
+            elif path.endswith("windthrow_mask.tif"):
+                self._add_raster_layer(path, "NISAR windthrow mask",
+                                       "Windthrow")
+            elif path.endswith(".gpkg"):
+                try:
+                    from qgis.core import QgsVectorLayer
+                    layer = QgsVectorLayer(
+                        path, "NISAR windthrow detections", "ogr")
+                    if layer.isValid():
+                        QgsProject.instance().addMapLayer(layer)
+                except Exception:  # pragma: no cover - cosmetic
+                    pass
+
+    def _format_windthrow_report(self, report: dict) -> str:
+        lines = []
+        background = report.get("background") or {}
+        threshold = report.get("threshold") or {}
+        detection = report.get("detection") or {}
+        metrics = report.get("metrics") or {}
+        lines.append(tr("ui.windthrow.r_method") +
+                     ": %s" % report.get("method", ""))
+        lines.append("%s: %s" % (tr("ui.windthrow.r_storm"),
+                                 report.get("storm_pair")))
+        lines.append("%s: %s" % (tr("ui.windthrow.r_control"),
+                                 report.get("control_pair")))
+        lines.append("%s: %s | %s" % (
+            tr("ui.windthrow.r_layer"), report.get("polarization"),
+            report.get("layer")))
+        lines.append("%s: %s" % (
+            tr("ui.windthrow.r_background"),
+            background.get("n_pixels")))
+        lines.append("%s: %.4f (%s)" % (
+            tr("ui.windthrow.r_threshold"),
+            float(threshold.get("value") or 0.0),
+            threshold.get("rule")))
+        lines.append("%s: %s px | %.1f ha | %s %s" % (
+            tr("ui.windthrow.r_detection"),
+            detection.get("pixels"),
+            float(detection.get("area_ha") or 0.0),
+            detection.get("objects"),
+            tr("ui.windthrow.r_objects")))
+        if report.get("flags"):
+            lines.append("%s: %s" % (tr("ui.windthrow.r_flags"),
+                                     ", ".join(report["flags"])))
+        if metrics:
+            lines.append("%s: AUC=%.3f | excess=%.3f | TPR@FPR5%%=%.3f "
+                         "(n_ref=%s, n_bg=%s)" % (
+                             tr("ui.windthrow.r_metrics"),
+                             metrics.get("auc"), metrics.get("excess"),
+                             metrics.get("tpr_fpr05"),
+                             metrics.get("n_ref"), metrics.get("n_bg")))
+        for warning in report.get("warnings") or []:
+            lines.append("⚠ %s" % warning)
+        return "\n".join(lines)
+
+    def _on_windthrow_error(self, message):
+        self.wt_run_btn.setEnabled(True)
+        self.wt_status.setText(
+            tr("ui.windthrow.failed").format(error=message))
+        QMessageBox.warning(self, tr("ui.error"), message)
 
     # -------------------------------------------------------------- Export
     def _create_export_tab(self) -> QWidget:

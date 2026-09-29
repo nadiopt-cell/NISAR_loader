@@ -26,6 +26,7 @@ class ProductType(Enum):
     GCOV = "GCOV"
     GSLC = "GSLC"
     RSLC = "RSLC"
+    GUNW = "GUNW"
     UNKNOWN = "UNKNOWN"
 
 

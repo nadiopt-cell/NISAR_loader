@@ -20,6 +20,14 @@ except Exception:  # pragma: no cover - environment specific
     osr = None
     GDAL_AVAILABLE = False
 
+try:  # optional standalone fallback when osgeo is missing (not used
+    import rasterio                     # inside QGIS, where osgeo exists)
+    from rasterio.transform import Affine
+    RASTERIO_AVAILABLE = True
+except Exception:  # pragma: no cover - environment specific
+    rasterio = None
+    RASTERIO_AVAILABLE = False
+
 from ..models import ProductHandle, GeorefInfo, ProcessingResult
 
 logger = logging.getLogger("nisar.processing.export")
@@ -154,6 +162,83 @@ class ExportBackend:
             metadata={"format": "GeoTIFF", "cog": bool(self.cog),
                       "dtype": dtype})
 
+    # ------------------------------------------------------------- write
+    def write_raster(self, data: np.ndarray, georef: GeorefInfo,
+                     output_path, dtype: str = "Float32",
+                     nodata: Optional[float] = None) -> ProcessingResult:
+        """Write one full-band raster from a numpy array.
+
+        Primary path: osgeo.gdal (always available inside QGIS).
+        Fallback: rasterio — lets standalone users (and CI without GDAL)
+        run the full windthrow pipeline. Neither available → graceful
+        failure with an install hint.
+        """
+        if data.ndim != 2:
+            return ProcessingResult(
+                success=False,
+                error_message="write_raster expects a 2-D array, got %r"
+                              % (data.shape,))
+        if GDAL_AVAILABLE:
+            nd = nodata if nodata is not None else float("nan")
+            return self.export_array(np.asarray(data), georef,
+                                     str(output_path), nodata=nd,
+                                     dtype=dtype)
+        if RASTERIO_AVAILABLE:
+            return self._write_raster_rasterio(np.asarray(data), georef,
+                                               str(output_path), dtype,
+                                               nodata)
+        return ProcessingResult(
+            success=False,
+            error_message=("Neither GDAL (osgeo) nor rasterio is available "
+                           "for raster export. Inside QGIS GDAL is always "
+                           "bundled; standalone: 'pip install gdal' or "
+                           "'pip install rasterio'."))
+
+    def _write_raster_rasterio(self, data: np.ndarray, georef: GeorefInfo,
+                               output_path: str, dtype: str,
+                               nodata: Optional[float]) -> ProcessingResult:
+        """rasterio fallback of write_raster (tiled GTiff + overviews)."""
+        dtype_map = {"Byte": "uint8", "UInt16": "uint16",
+                     "Int16": "int16", "UInt32": "uint32",
+                     "Int32": "int32", "Float32": "float32",
+                     "Float64": "float64"}
+        r_dtype = dtype_map.get(dtype, "float32")
+        ulx, xres, _, uly, _, yres = georef.transform
+        transform = Affine.from_gdal(ulx, xres, 0.0, uly, 0.0, yres)
+        try:
+            profile = dict(
+                driver="GTiff", width=data.shape[1], height=data.shape[0],
+                count=1, dtype=r_dtype,
+                transform=transform,
+                crs=(georef.crs_wkt or georef.crs_authid or None),
+                compress=self.compress, tiled=True,
+                blockxsize=self.block_size, blockysize=self.block_size,
+                bigtiff="IF_SAFER" if self.big_tiff == "IF_SAFER"
+                else self.big_tiff,
+            )
+            if r_dtype.startswith("float"):
+                profile["predictor"] = self.predictor
+            with rasterio.open(output_path, "w", **profile) as dst:
+                if nodata is not None:
+                    dst.nodata = nodata
+                dst.write(data.astype(r_dtype), 1)
+                if self.cog:
+                    try:
+                        from rasterio.enums import Resampling
+                        dst.build_overviews(
+                            [2, 4, 8, 16],
+                            resampling=Resampling.average)
+                    except Exception:  # pragma: no cover - cosmetic
+                        pass
+        except Exception as exc:
+            return ProcessingResult(success=False,
+                                    error_message="rasterio export failed: "
+                                                  "%s" % exc)
+        return ProcessingResult(
+            success=True, output_paths=[output_path],
+            metadata={"format": "GeoTIFF", "writer": "rasterio",
+                      "dtype": dtype})
+
     # ------------------------------------------------------------- layers
     def export_layer(self, handle: ProductHandle, layer_name: str,
                      output_path, tile_size: int = 512,
@@ -177,6 +262,16 @@ class ExportBackend:
                 error_message=("Cannot export %r: the product has no valid "
                                "georeference" % layer_name))
 
+        # GUNW products carry two grids (80 m / 20 m): a layer may bring
+        # its own georef copy in metadata — prefer it over the handle's.
+        georef = handle.georef
+        try:
+            layer_georef = layer.metadata.get("georef")
+        except Exception:  # pragma: no cover - defensive
+            layer_georef = None
+        if layer_georef is not None and getattr(layer_georef, "is_valid", False):
+            georef = layer_georef
+
         try:
             _require_gdal()
         except RuntimeError as exc:
@@ -192,7 +287,7 @@ class ExportBackend:
         height, width = layer.shape
         try:
             ds = self.create_dataset(str(output_path), width, height,
-                                     "Float32", handle.georef, nodata=np.nan)
+                                     "Float32", georef, nodata=np.nan)
         except RuntimeError as exc:
             return ProcessingResult(success=False, error_message=str(exc))
 

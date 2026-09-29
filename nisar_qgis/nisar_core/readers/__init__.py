@@ -31,7 +31,14 @@ except Exception as _exc:  # pragma: no cover - h5py optional
     A3H5PyReader = None
     logger.debug("A3 (h5py) not importable: %s", _exc)
 
+try:
+    from .a4_gunw import A4GunwH5PyReader
+except Exception as _exc:  # pragma: no cover - h5py optional
+    A4GunwH5PyReader = None
+    logger.debug("A4 (h5py GUNW) not importable: %s", _exc)
+
 __all__ = [
     'BaseReader', 'ReaderRegistry', 'product_layers',
     'A1NativeReader', 'A2NetCDFWorkaroundReader', 'A3H5PyReader',
+    'A4GunwH5PyReader',
 ]

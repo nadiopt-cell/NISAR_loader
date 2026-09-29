@@ -267,3 +267,212 @@ def gcov_ur_vdual(tmp_path_factory):
                             data=np.array(["VHVH", "VVVV"], dtype="S4"))
 
     return str(path)
+
+
+# ---------------------------------------------------------------------------
+# Synthetic GUNW pairs (storm + control) with an injected windthrow.
+# Layout verified against a real granule (2026-06-20, track 093, frame 58,
+# PROVISIONAL P05023): layers live under
+#   /science/LSAR/GUNW/grids/frequencyA/<group>/[<pol>/]<dataset>
+# with group-level coordinates; identification is product-level and carries
+# reference*/secondary* fields; mask is uint32 in the real product.
+# ---------------------------------------------------------------------------
+GH, GW = 64, 48                    # 80 m grid: 5.1 x 3.8 km
+GX0, GY0, GDX, GDY = 270000.0, 1044720.0, 80.0, 80.0
+GUNW_EPSG = 32641
+
+WKT_UTM41N = (
+    'PROJCS["WGS 84 / UTM zone 41N",'
+    'GEOGCS["WGS 84",'
+    'DATUM["WGS_1984",'
+    'SPHEROID["WGS 84",6378137,298.257223563,'
+    'AUTHORITY["EPSG","7030"]],AUTHORITY["EPSG","6326"]],'
+    'PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],'
+    'UNIT["degree",0.0174532925199433],AUTHORITY["EPSG","4326"]],'
+    'PROJECTION["Transverse_Mercator"],'
+    'PARAMETER["latitude_of_origin",0],'
+    'PARAMETER["central_meridian",63],'
+    'PARAMETER["scale_factor",0.9996],'
+    'PARAMETER["false_easting",500000],'
+    'PARAMETER["false_northing",0],UNIT["metre",1],'
+    'AXIS["Easting",EAST],AXIS["Northing",NORTH],'
+    'AUTHORITY["EPSG","32641"]])')
+
+# the synthetic windthrow: rows 20..32, cols 10..22 (12x12 px @ 80 m)
+GUNW_DAMAGE_ROWS = (20, 32)
+GUNW_DAMAGE_COLS = (10, 22)
+GUNW_DAMAGE_COH_DROP = 0.35       # storm-pair coherence drop inside damage
+
+
+def _gunw_noise(seed):
+    """Spatially correlated coherence noise (multilooked 80 m layers are
+    smooth in reality; iid per-pixel noise would be unrealistically harsh
+    for the detector)."""
+    rng = np.random.default_rng(seed)
+    coarse = rng.normal(0.0, 0.05, (GH // 4, GW // 4))
+    fine = np.kron(coarse, np.ones((4, 4)))[:GH, :GW]
+    return (fine + rng.normal(0.0, 0.01, (GH, GW))).astype(np.float32)
+
+
+def _gunw_coherence(kind: str):
+    """Coherence of one pair: intact forest ~0.62, damage drop in storm."""
+    noise = _gunw_noise(7 if kind == "storm" else 11)
+    base = np.full((GH, GW), 0.62, dtype=np.float32)
+    data = np.clip(base + noise, 0.02, 0.98)
+    if kind == "storm":
+        r0, r1 = GUNW_DAMAGE_ROWS
+        c0, c1 = GUNW_DAMAGE_COLS
+        data[r0:r1, c0:c1] = np.clip(
+            data[r0:r1, c0:c1] - GUNW_DAMAGE_COH_DROP, 0.02, 0.98)
+    return data
+
+
+def make_synthetic_gunw(path, kind: str, track: int = 93, frame: int = 58,
+                        granule_suffix: str = "STORM" if True else ""):
+    """Create a small NISAR GUNW-like HDF5 file (storm or control pair).
+
+    ``kind``: 'storm' (damage inside the interval) or 'control' (intact).
+    """
+    import h5py
+
+    if kind == "storm":
+        granule = ("NISAR_L2_PR_GUNW_023_%03d_D_%03d_024_2000_SH_"
+                   "20260620T154356_20260620T154433_20260702T154356_"
+                   "20260702T154432_P05023_N_F_J_001" % (track, frame))
+        ref_start, ref_end = "2026-06-20T15:43:56.000000000", \
+            "2026-06-20T15:44:33.000000000"
+        sec_start, sec_end = "2026-07-02T15:43:56.000000000", \
+            "2026-07-02T15:44:32.000000000"
+        ref_orbit, sec_orbit = np.uint32(4661), np.uint32(4834)
+    else:
+        granule = ("NISAR_L2_PR_GUNW_024_%03d_D_%03d_025_2000_SH_"
+                   "20260702T154356_20260702T154432_20260714T154355_"
+                   "20260714T154431_P05023_F_F_J_001" % (track, frame))
+        ref_start, ref_end = "2026-07-02T15:43:56.000000000", \
+            "2026-07-02T15:44:32.000000000"
+        sec_start, sec_end = "2026-07-14T15:43:55.000000000", \
+            "2026-07-14T15:44:31.000000000"
+        ref_orbit, sec_orbit = np.uint32(4834), np.uint32(5007)
+
+    with h5py.File(str(path), "w") as f:
+        ident = f.create_group("/science/LSAR/identification")
+        ident["granuleId"] = granule
+        ident["productType"] = "GUNW"
+        ident["productVersion"] = "1.0.11"
+        ident["productLevel"] = "L2"
+        ident["missionId"] = "NISAR"
+        ident["platformName"] = "NISAR"
+        ident["instrumentName"] = "L-SAR"
+        ident["radarBand"] = "L"
+        ident["lookDirection"] = "Left"
+        ident["orbitPassDirection"] = "Descending"
+        ident["trackNumber"] = np.uint32(track)
+        ident["frameNumber"] = np.uint16(frame)
+        ident["isGeocoded"] = "True"
+        ident["isUrgentObservation"] = "False"
+        ident["isFullFrame"] = "True"
+        ident["processingType"] = "Nominal"
+        ident["processingCenter"] = "JPL"
+        ident["processingDateTime"] = "2026-07-20T01:00:00"
+        ident["compositeReleaseId"] = "P05023"
+        ident["listOfFrequencies"] = np.array(["A"], dtype="S1")
+        ident["referenceAbsoluteOrbitNumber"] = ref_orbit
+        ident["secondaryAbsoluteOrbitNumber"] = sec_orbit
+        ident["referenceZeroDopplerStartTime"] = ref_start
+        ident["referenceZeroDopplerEndTime"] = ref_end
+        ident["secondaryZeroDopplerStartTime"] = sec_start
+        ident["secondaryZeroDopplerEndTime"] = sec_end
+        ident["boundingPolygon"] = (
+            "POLYGON ((56.88 58.35 100.0, 63.15 58.35 200.0, "
+            "63.15 61.50 300.0, 56.88 61.50 400.0, "
+            "56.88 58.35 100.0))")
+
+        base = "/science/LSAR/GUNW/grids/frequencyA"
+        unw = f.create_group("%s/unwrappedInterferogram" % base)
+        hh = unw.create_group("HH")
+
+        coh = _gunw_coherence(kind)
+        ds = hh.create_dataset("coherenceMagnitude", data=coh, dtype="f4")
+        ds.attrs["units"] = "1"
+        ds.attrs["_FillValue"] = np.float32("nan")
+        ds.attrs["grid_mapping"] = "projection"
+
+        phase = hh.create_dataset(
+            "unwrappedPhase",
+            data=np.zeros((GH, GW), dtype="f4"))
+        phase.attrs["_FillValue"] = np.float32("nan")
+        comps = hh.create_dataset(
+            "connectedComponents",
+            data=np.zeros((GH, GW), dtype="u2"))
+        comps.attrs["_FillValue"] = np.uint16(65535)
+
+        mask = np.zeros((GH, GW), dtype=np.uint32)
+        mask[:2, :] = 1
+        mds = unw.create_dataset("mask", data=mask, dtype="u4")
+        mds.attrs["_FillValue"] = np.uint32(4294967295)
+
+        # group-level coordinates (CF pixel centers; y descending, north-up)
+        xs = GX0 + GDX * np.arange(GW, dtype=np.float64)
+        ys = GY0 - GDY * np.arange(GH, dtype=np.float64)
+        unw.create_dataset("xCoordinates", data=xs)
+        unw.create_dataset("yCoordinates", data=ys)
+        unw.create_dataset("xCoordinateSpacing", data=np.float64(GDX))
+        unw.create_dataset("yCoordinateSpacing", data=np.float64(-GDY))
+        proj = unw.create_dataset("projection", data=np.uint32(GUNW_EPSG))
+        proj.attrs["epsg_code"] = str(GUNW_EPSG)
+        proj.attrs["spatial_ref"] = WKT_UTM41N
+        proj.attrs["grid_mapping_name"] = "transverse_mercator"
+
+        # 20 m wrappedInterferogram grid (4x resolution), incl. coherence
+        wrp = f.create_group("%s/wrappedInterferogram" % base)
+        whh = wrp.create_group("HH")
+        coh20 = np.kron(coh, np.ones((4, 4), dtype=np.float32))
+        ds20 = whh.create_dataset("coherenceMagnitude", data=coh20,
+                                  dtype="f4")
+        ds20.attrs["units"] = "1"
+        ds20.attrs["_FillValue"] = np.float32("nan")
+        interfero = whh.create_dataset(
+            "wrappedInterferogram",
+            data=(np.exp(1j * 0.1) * np.ones(coh20.shape,
+                                             dtype=np.complex64)))
+        interfero.attrs["_FillValue"] = "(nan+nanj)"
+        xs20 = GX0 + (GDX / 4) * np.arange(GW * 4, dtype=np.float64)
+        ys20 = GY0 - (GDY / 4) * np.arange(GH * 4, dtype=np.float64)
+        wrp.create_dataset("xCoordinates", data=xs20)
+        wrp.create_dataset("yCoordinates", data=ys20)
+        wrp.create_dataset("xCoordinateSpacing", data=np.float64(GDX / 4))
+        wrp.create_dataset("yCoordinateSpacing", data=np.float64(-GDY / 4))
+        proj20 = wrp.create_dataset("projection", data=np.uint32(GUNW_EPSG))
+        proj20.attrs["epsg_code"] = str(GUNW_EPSG)
+        proj20.attrs["spatial_ref"] = WKT_UTM41N
+        wrp.create_dataset(
+            "listOfPolarizations", data=np.array(["HH"], dtype="S2"))
+
+        fa = f.require_group(base)
+        fa.create_dataset("centerFrequency", data=np.float64(1.2575e9))
+        fa.create_dataset(
+            "listOfPolarizations", data=np.array(["HH"], dtype="S2"))
+
+    return str(path)
+
+
+@pytest.fixture(scope="session")
+def gunw_storm(tmp_path_factory):
+    path = tmp_path_factory.mktemp("gunw") / "storm.h5"
+    return make_synthetic_gunw(path, kind="storm")
+
+
+@pytest.fixture(scope="session")
+def gunw_control(tmp_path_factory):
+    path = tmp_path_factory.mktemp("gunw") / "control.h5"
+    return make_synthetic_gunw(path, kind="control")
+
+
+@pytest.fixture()
+def gunw_damage_mask():
+    """The synthetic windthrow footprint as a bool array."""
+    import numpy as np
+    m = np.zeros((GH, GW), dtype=bool)
+    m[GUNW_DAMAGE_ROWS[0]:GUNW_DAMAGE_ROWS[1],
+      GUNW_DAMAGE_COLS[0]:GUNW_DAMAGE_COLS[1]] = True
+    return m

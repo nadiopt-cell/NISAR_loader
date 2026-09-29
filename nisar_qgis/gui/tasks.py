@@ -7,6 +7,7 @@ Progress/results are delivered to the GUI thread via Qt signals
 (queued connections), never by touching widgets from run().
 """
 import logging
+from datetime import datetime
 from pathlib import Path
 
 from qgis.PyQt.QtCore import QObject, pyqtSignal
@@ -198,6 +199,88 @@ class NisarExportTask(QgsTask):
             msg = getattr(self, "_error", "Export failed")
             if getattr(self, "_result", None) and self._result.error_message:
                 msg = self._result.error_message
+            self.signals.finished_error.emit(msg)
+
+
+class NisarWindthrowTask(QgsTask):
+    """Windthrow DiD detection on a GUNW storm/control pair (P3).
+
+    All parameters are plain data (paths, dicts) — the worker thread must
+    not touch widgets. The ProcessingResult (with the report dict in
+    ``metadata``) is emitted through ``finished_ok``.
+    """
+
+    def __init__(self, storm_path: str, control_path: str, output_dir,
+                 config, params=None, ref_mask=None, forest_mask=None,
+                 event_date=None, polygonize=False,
+                 build_forest_mask=False):
+        super().__init__(self.tr("NISAR: windthrow DiD"), QgsTask.CanCancel)
+        self.storm_path = str(storm_path)
+        self.control_path = str(control_path)
+        self.output_dir = str(output_dir) if output_dir else None
+        self.config = config
+        self.params = params
+        self.ref_mask = ref_mask
+        self.forest_mask = forest_mask
+        self.event_date = event_date
+        self.polygonize = polygonize
+        self.build_forest_mask = build_forest_mask
+        self.signals = TaskSignals()
+        self.forest_warnings = []
+
+    def run(self):
+        from ..nisar_core.processing.windthrow import run_windthrow_did
+
+        try:
+            forest_mask = self.forest_mask
+            if self.build_forest_mask and forest_mask is None:
+                forest_mask, warns = self._build_forest_mask()
+                self.forest_warnings = warns
+            result = run_windthrow_did(
+                self.storm_path, self.control_path,
+                output_dir=self.output_dir,
+                config=self.config,
+                params=self.params,
+                ref_mask=self.ref_mask,
+                forest_mask=forest_mask,
+                event_date=self.event_date,
+                progress_callback=self.setProgress,
+                is_canceled=self.isCanceled,
+                polygonize=self.polygonize)
+            self._result = result
+            return bool(result.success)
+        except Exception as exc:
+            logger.exception("Windthrow task failed")
+            self._error = str(exc)
+            return False
+
+    def _build_forest_mask(self):
+        """Hansen GFC forest@Y mask on the storm granule grid."""
+        from ..nisar_core.readers import ReaderRegistry
+        from ..nisar_core.processing.forest_mask import (
+            forest_mask_for_grid, bbox_from_bounding_polygon,
+        )
+        handle = ReaderRegistry.open(self.storm_path, config=self.config)
+        try:
+            georef = handle.georef
+            ident = handle.metadata.get("identification") or {}
+            bbox = bbox_from_bounding_polygon(
+                ident.get("boundingPolygon", ""))
+        finally:
+            ReaderRegistry.close(handle)
+        year = self.event_date.year if self.event_date else \
+            datetime.now().year
+        return forest_mask_for_grid(georef, year=year, bbox_wgs84=bbox)
+
+    def finished(self, success):
+        if success:
+            self.signals.finished_ok.emit(self._result)
+        else:
+            msg = getattr(self, "_error", "Windthrow DiD failed")
+            if getattr(self, "_result", None) and self._result.error_message:
+                msg = self._result.error_message
+            QgsMessageLog.logMessage("NISAR windthrow DiD failed: %s" % msg,
+                                     "NISAR", level=QgsMessageLog.WARNING)
             self.signals.finished_error.emit(msg)
 
 

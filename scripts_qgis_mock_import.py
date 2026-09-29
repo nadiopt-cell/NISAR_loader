@@ -73,7 +73,11 @@ QgsCoordinateReferenceSystem QgsCoordinateTransform QgsGeometry
 QgsRectangle QgsWkbTypes QgsProcessingProvider QgsProcessingAlgorithm
 QgsProcessingParameterFile QgsProcessingParameterString
 QgsProcessingParameterBoolean QgsProcessingParameterRasterDestination
+QgsProcessingParameterVectorLayer QgsProcessingParameterFeatureSource
+QgsProcessingParameterNumber QgsProcessingParameterFolderDestination
 QgsProcessingException QgsRasterMinMaxOrigin QgsLayerMetadata QgsSettings
+QgsVectorLayer QgsVectorFileWriter QgsProcessingUtils QgsFields QgsField
+QgsFeature QgsCoordinateReferenceSystem
 """.split()
 _fake_module("qgis.core", _qgis_core_names)
 _fake_module("qgis.gui", ["QgsMessageBar", "QgisInterface", "QgsRubberBand"])
@@ -87,6 +91,7 @@ modules = [
     "nisar_qgis.gui.main_dialog",
     "nisar_qgis.algorithms",
     "nisar_qgis.algorithms.indices_algorithms",
+    "nisar_qgis.algorithms.windthrow_algorithms",
     "nisar_qgis.provider",
     "nisar_qgis.plugin",
 ]

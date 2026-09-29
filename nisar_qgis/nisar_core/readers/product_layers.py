@@ -84,6 +84,66 @@ PROVISIONAL_CRID = "P05023"
 
 
 # ---------------------------------------------------------------------------
+# GUNW (L2 geocoded unwrapped interferogram) — JPL D-102272 Rev E §5.3.
+# Interferometric pairs: only co-pol (HH or VV), only frequencyA.
+# Two nested grids per product:
+#   * unwrappedInterferogram/<pol>/  — 80 m posting: coherenceMagnitude,
+#     unwrappedPhase, connectedComponents, ionospherePhaseScreen(+Uncertainty)
+#   * wrappedInterferogram/<pol>/    — 20 m posting: coherenceMagnitude,
+#     complex wrappedInterferogram
+# Group-level coordinate datasets sit directly under the group
+# (e.g. .../unwrappedInterferogram/xCoordinates), pixel centers per CF.
+# ---------------------------------------------------------------------------
+GUNW_GRID_BASE = "/science/{instrument}/GUNW/grids"
+GUNW_FREQ = "frequencyA"  # interferometry never uses frequencyB (spec §3.2.4)
+GUNW_GROUP_UNWRAPPED = "unwrappedInterferogram"   # 80 m posting
+GUNW_GROUP_WRAPPED = "wrappedInterferogram"       # 20 m posting
+
+GUNW_CO_POL_LAYERS = ("HH", "VV")  # cross-pol is never interferometrically
+                                   # processed (spec §3.2.4)
+GUNW_UNWRAPPED_DATASETS = (
+    "coherenceMagnitude", "unwrappedPhase", "connectedComponents",
+    "ionospherePhaseScreen", "ionospherePhaseScreenUncertainty",
+)
+GUNW_WRAPPED_DATASETS = (
+    "coherenceMagnitude", "wrappedInterferogram",
+)
+GUNW_POSTING_BY_GROUP = {
+    "unwrappedInterferogram": 80,   # nominal meters
+    "wrappedInterferogram": 20,
+}
+
+# Identification is product-level (NOT under /GUNW): /science/LSAR/identification.
+# GUNW adds reference*/secondary* fields for the interferometric pair.
+GUNW_PAIR_IDENTIFICATION_FIELDS = (
+    "referenceAbsoluteOrbitNumber", "secondaryAbsoluteOrbitNumber",
+    "referenceZeroDopplerStartTime", "referenceZeroDopplerEndTime",
+    "secondaryZeroDopplerStartTime", "secondaryZeroDopplerEndTime",
+)
+
+
+def gunw_grid_group(instrument: str = "LSAR",
+                    group: str = GUNW_GROUP_UNWRAPPED) -> str:
+    """Full HDF5 group path of a GUNW layer group (80 m or 20 m).
+
+    Verified on a real granule (2026-06-18, track 064, PROVISIONAL):
+      /science/LSAR/GUNW/grids/frequencyA/unwrappedInterferogram
+    """
+    return "%s/%s/%s" % (GUNW_GRID_BASE.format(instrument=instrument),
+                         GUNW_FREQ, group)
+
+
+def gunw_layer_path(pol: str, dataset: str,
+                    instrument: str = "LSAR",
+                    group: str = GUNW_GROUP_UNWRAPPED) -> str:
+    """Full HDF5 dataset path of a GUNW layer, e.g.
+    /science/LSAR/GUNW/grids/frequencyA/unwrappedInterferogram/HH/coherenceMagnitude
+    """
+    return "%s/%s/%s" % (gunw_grid_group(instrument, group),
+                         pol.upper(), dataset)
+
+
+# ---------------------------------------------------------------------------
 # Layer-name <-> polarization mapping
 # ---------------------------------------------------------------------------
 _POL_BY_LAYER_NAME = {

@@ -31,9 +31,11 @@ class NisarProvider(QgsProcessingProvider):
         from .algorithms import (
             NisarHvDbAlgorithm, NisarCrossRatioAlgorithm,
             NisarRviAlgorithm, NisarExportAlgorithm,
+            NisarWindthrowDidAlgorithm,
         )
         for algorithm_class in (NisarHvDbAlgorithm,
                                 NisarCrossRatioAlgorithm,
                                 NisarRviAlgorithm,
-                                NisarExportAlgorithm):
+                                NisarExportAlgorithm,
+                                NisarWindthrowDidAlgorithm):
             self.addAlgorithm(algorithm_class())
