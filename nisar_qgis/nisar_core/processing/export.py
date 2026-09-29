@@ -177,7 +177,10 @@ class ExportBackend:
                 error_message=("Cannot export %r: the product has no valid "
                                "georeference" % layer_name))
 
-        _require_gdal()
+        try:
+            _require_gdal()
+        except RuntimeError as exc:
+            return ProcessingResult(success=False, error_message=str(exc))
         for backend in ReaderRegistry._backends:
             if backend.BACKEND_ID == handle.reader_backend:
                 reader = backend(self.config)

@@ -346,8 +346,13 @@ def compute_index_to_raster(handle: ProductHandle, index_id: str,
 
     height, width = layers["hv"].shape
     exporter = ExportBackend(dict(config, cog=cog))
-    ds = exporter.create_dataset(str(output_path), width, height, "Float32",
-                                 georef, nodata=np.nan)
+    try:
+        ds = exporter.create_dataset(str(output_path), width, height,
+                                     "Float32", georef, nodata=np.nan)
+    except RuntimeError as exc:
+        # e.g. GDAL missing in standalone Python: fail gracefully, never
+        # let an environment error escape as an unhandled traceback.
+        return ProcessingResult(success=False, error_message=str(exc))
     try:
         if ds is None:
             return ProcessingResult(
