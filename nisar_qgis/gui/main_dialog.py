@@ -13,18 +13,20 @@ import re
 from datetime import datetime
 from pathlib import Path
 
-from qgis.PyQt.QtCore import Qt, QSize
+from qgis.PyQt.QtCore import Qt, QSize, QUrl
 from qgis.PyQt.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QTabWidget, QWidget,
     QLabel, QLineEdit, QPushButton, QComboBox, QTableWidget,
     QTableWidgetItem, QHeaderView, QFileDialog, QCheckBox,
     QFormLayout, QMessageBox, QGroupBox, QApplication, QTextBrowser,
 )
-from qgis.PyQt.QtGui import QColor, QFont
+from qgis.PyQt.QtGui import QColor, QFont, QPixmap, QDesktopServices
 from qgis.core import (
     QgsProject, QgsRasterLayer, QgsCoordinateReferenceSystem,
-    QgsCoordinateTransform, QgsGeometry, QgsMessageLog,
+    QgsCoordinateTransform, QgsGeometry, QgsMessageLog, QgsRectangle,
+    QgsWkbTypes,
 )
+from qgis.gui import QgsRubberBand
 
 from ..config_manager import config_manager, config_as_dict
 from ..i18n import tr, set_language
@@ -32,8 +34,10 @@ from ..nisar_core.config import ReaderBackend, AccessBackend
 from ..nisar_core.models import ProductType, DataStatus
 from ..nisar_core.readers import ReaderRegistry
 from ..nisar_core.presets import PRESETS, get_preset, list_presets
+from ..nisar_core.access.preview import scene_summary_pairs
 from .tasks import (
     NisarSearchTask, NisarDownloadTask, NisarComputeTask, NisarExportTask,
+    NisarPreviewTask,
 )
 
 logger = logging.getLogger("nisar.gui.dialog")
@@ -50,6 +54,11 @@ _STATUS_COLORS = {
 }
 
 
+def _esc_html(text) -> str:
+    return (str(text).replace("&", "&amp;").replace("<", "&lt;")
+            .replace(">", "&gt;"))
+
+
 class NisarMainDialog(QDialog):
     """Main GUI for the NISAR Vegetation plugin."""
 
@@ -64,6 +73,10 @@ class NisarMainDialog(QDialog):
         self._tasks = []               # keep references to running tasks
         self._tr_widgets = []          # (widget, key, attr) retranslation
         self._layer_checkboxes = {}    # row -> QCheckBox
+        self._preview_scene = None     # scene shown in the preview panel
+        self._preview_task = None      # running thumbnail fetch (P2.5)
+        self._footprint_band = None    # QgsRubberBand on the map canvas
+        self._preview_extent = None    # footprint bbox in canvas CRS
 
         self.setWindowTitle(tr("plugin.name"))
         self.resize(980, 640)
@@ -143,11 +156,66 @@ class NisarMainDialog(QDialog):
         self.results_table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.results_table.horizontalHeader().setSectionResizeMode(
             QHeaderView.Stretch)
-        results_layout.addWidget(self.results_table)
+        self.results_table.itemSelectionChanged.connect(
+            self._on_scene_selected)
+        self.results_table.cellDoubleClicked.connect(
+            self._on_scene_double_clicked)
+        results_layout.addWidget(self.results_table, 1)
+        results_layout.addWidget(self._create_preview_panel())
 
         layout.addWidget(filter_panel, 1)
         layout.addWidget(results_panel, 3)
         return widget
+
+    # ------------------------------------------------------------- Preview
+    def _create_preview_panel(self) -> QWidget:
+        """Quicklook + details + footprint preview before download (P2.5)."""
+        panel = QGroupBox()
+        self._bind(panel, "ui.preview.title", "title")
+        row = QHBoxLayout(panel)
+
+        self.preview_image = QLabel()
+        self.preview_image.setMinimumSize(220, 220)
+        self.preview_image.setAlignment(Qt.AlignCenter)
+        self.preview_image.setWordWrap(True)
+        self.preview_image.setStyleSheet("background: #2b2b2b;"
+                                         "color: #bbbbbb;")
+        self.preview_image.setText(tr("ui.preview.hint"))
+        row.addWidget(self.preview_image)
+
+        side = QWidget()
+        side_layout = QVBoxLayout(side)
+        side_layout.setContentsMargins(0, 0, 0, 0)
+
+        self.preview_details = QTextBrowser()
+        self.preview_details.setOpenExternalLinks(False)
+        self.preview_details.setMaximumHeight(160)
+        side_layout.addWidget(self.preview_details)
+
+        btn_row = QWidget()
+        btn_layout = QHBoxLayout(btn_row)
+        btn_layout.setContentsMargins(0, 0, 0, 0)
+        self.preview_zoom_btn = QPushButton()
+        self._bind(self.preview_zoom_btn, "ui.preview.zoom", "text")
+        self.preview_zoom_btn.clicked.connect(self._on_zoom_to_scene)
+        self.preview_zoom_btn.setEnabled(False)
+        self.preview_open_browse_btn = QPushButton()
+        self._bind(self.preview_open_browse_btn, "ui.preview.open_browse",
+                   "text")
+        self.preview_open_browse_btn.clicked.connect(self._on_open_browse)
+        self.preview_open_browse_btn.setEnabled(False)
+        btn_layout.addWidget(self.preview_zoom_btn)
+        btn_layout.addWidget(self.preview_open_browse_btn)
+        btn_layout.addStretch()
+        side_layout.addWidget(btn_row)
+
+        self.preview_status = QLabel("")
+        self.preview_status.setWordWrap(True)
+        self.preview_status.setStyleSheet("color: #555; font-size: 11px;")
+        side_layout.addWidget(self.preview_status)
+
+        row.addWidget(side, 1)
+        return panel
 
     # ----------------------------------------------------------- Download
     def _create_download_tab(self) -> QWidget:
@@ -490,6 +558,7 @@ class NisarMainDialog(QDialog):
         self.search_btn.setEnabled(True)
         self.search_btn.setText(tr("ui.search.button"))
         self._scenes = list(scenes or [])
+        self._clear_preview()
 
         self.results_table.setRowCount(0)
         beta_found = False
@@ -538,6 +607,186 @@ class NisarMainDialog(QDialog):
         self.search_btn.setEnabled(True)
         self.search_btn.setText(tr("ui.search.button"))
         QMessageBox.critical(self, tr("ui.error"), message)
+
+    # ============================================================== Preview
+    def _scene_for_row(self, row):
+        """SceneRecord for a results-table row (by scene id)."""
+        if row < 0 or not self._scenes:
+            return None
+        item = self.results_table.item(row, 0)
+        if item is None:
+            return None
+        for scene in self._scenes:
+            if scene.scene_id == item.text():
+                return scene
+        return None
+
+    def _on_scene_selected(self):
+        items = self.results_table.selectedItems()
+        scene = self._scene_for_row(items[0].row()) if items else None
+        if scene is None:
+            self._clear_preview()
+            return
+        self._show_scene_preview(scene)
+
+    def _on_scene_double_clicked(self, row, _column):
+        self._on_zoom_to_scene()
+
+    def _show_scene_preview(self, scene):
+        """Details + footprint + quicklook for the selected scene."""
+        self._preview_scene = scene
+        rows = []
+        for key, value in scene_summary_pairs(scene):
+            rows.append("<tr><td><b>%s</b></td><td>%s</td></tr>"
+                        % (_esc_html(tr(key)), _esc_html(value)))
+        self.preview_details.setHtml(
+            "<table width='100%%' cellspacing='4'>%s</table>"
+            % "".join(rows))
+
+        self._show_footprint(scene)
+        self._load_preview_image(scene)
+        self.preview_open_browse_btn.setEnabled(bool(
+            scene.urls.get("browse_full") or scene.urls.get("browse")
+            or scene.urls.get("browse_native")))
+
+    def _show_footprint(self, scene):
+        """Draw the scene footprint (EPSG:4326) on the map canvas."""
+        self._clear_footprint_band()
+        try:
+            if not scene.footprint_wkt:
+                return
+            geometry = QgsGeometry.fromWkt(scene.footprint_wkt)
+            if geometry is None or geometry.isNull():
+                return
+            canvas = self.iface.mapCanvas()
+            src_crs = QgsCoordinateReferenceSystem("EPSG:4326")
+            dst_crs = canvas.mapSettings().destinationCrs()
+            if src_crs != dst_crs:
+                transform = QgsCoordinateTransform(
+                    src_crs, dst_crs, QgsProject.instance())
+                if geometry.transform(transform) != 0:
+                    raise RuntimeError("footprint transform failed")
+            band = QgsRubberBand(canvas, QgsWkbTypes.PolygonGeometry)
+            band.setFillColor(QColor(255, 200, 0, 40))
+            band.setStrokeColor(QColor(255, 160, 0, 220))
+            band.setWidth(2)
+            band.setToGeometry(geometry, None)
+            self._footprint_band = band
+            self._preview_extent = QgsRectangle(geometry.boundingBox())
+            self.preview_zoom_btn.setEnabled(True)
+        except Exception as exc:
+            logger.warning("Footprint preview failed: %s", exc)
+            self._footprint_band = None
+            self._preview_extent = None
+            self.preview_zoom_btn.setEnabled(False)
+
+    def _clear_footprint_band(self):
+        if self._footprint_band is not None:
+            try:
+                self._footprint_band.reset()
+            except Exception:  # pragma: no cover - cosmetic
+                pass
+            self._footprint_band = None
+        self._preview_extent = None
+        self.preview_zoom_btn.setEnabled(False)
+
+    def _load_preview_image(self, scene):
+        """Fetch the quicklook thumbnail in the background (P2.5)."""
+        if self._preview_task is not None:
+            try:
+                self._preview_task.cancel()
+            except Exception:  # pragma: no cover
+                pass
+            self._preview_task = None
+        url = scene.urls.get("browse_thumbnail") or scene.urls.get("browse")
+        if not url:
+            self.preview_image.setPixmap(QPixmap())
+            self.preview_image.setText(tr("ui.preview.unavailable"))
+            self.preview_status.setText("")
+            return
+        self.preview_image.setPixmap(QPixmap())
+        self.preview_image.setText(tr("ui.preview.loading"))
+        self.preview_status.setText(tr("ui.preview.loading"))
+
+        task = NisarPreviewTask(url, scene.scene_id)
+        task.setProperty("scene_id", scene.scene_id)
+        task.signals.finished_ok.connect(
+            lambda data, t=task: self._on_preview_loaded(t, data))
+        task.signals.finished_error.connect(
+            lambda message, t=task: self._on_preview_failed(t, message))
+        self._preview_task = task
+        self._tasks.append(task)
+        from qgis.core import QgsApplication
+        QgsApplication.taskManager().addTask(task)
+
+    def _on_preview_loaded(self, task, data):
+        if self._preview_task is not None and task is not self._preview_task:
+            return  # superseded by a newer selection
+        self._preview_task = None
+        pixmap = QPixmap()
+        if not pixmap.loadFromData(data):
+            self._on_preview_failed(task, "cannot decode image")
+            return
+        self.preview_status.setText("")
+        self.preview_image.setText("")
+        self.preview_image.setPixmap(pixmap.scaled(
+            self.preview_image.size(), Qt.KeepAspectRatio,
+            Qt.SmoothTransformation))
+
+    def _on_preview_failed(self, task, message):
+        if self._preview_task is not None and task is not self._preview_task:
+            return
+        self._preview_task = None
+        self.preview_image.setText(tr("ui.preview.unavailable"))
+        self.preview_status.setText(
+            tr("ui.preview.failed").format(error=message))
+
+    def _clear_preview(self):
+        self._preview_scene = None
+        self._clear_footprint_band()
+        if self._preview_task is not None:
+            try:
+                self._preview_task.cancel()
+            except Exception:  # pragma: no cover
+                pass
+            self._preview_task = None
+        self.preview_image.setPixmap(QPixmap())
+        self.preview_image.setText(tr("ui.preview.hint"))
+        self.preview_details.setHtml("")
+        self.preview_status.setText("")
+        self.preview_zoom_btn.setEnabled(False)
+        self.preview_open_browse_btn.setEnabled(False)
+
+    def _on_zoom_to_scene(self):
+        """Zoom the map to the selected scene's footprint."""
+        extent = self._preview_extent
+        if extent is None:
+            return
+        try:
+            canvas = self.iface.mapCanvas()
+            rect = QgsRectangle(extent)
+            try:
+                rect.scale(1.15)  # a little context around the footprint
+            except Exception:  # pragma: no cover - cosmetic
+                pass
+            canvas.setExtent(rect)
+            canvas.refresh()
+        except Exception as exc:
+            QMessageBox.warning(self, tr("ui.warning"), str(exc))
+
+    def _on_open_browse(self):
+        """Open the full-resolution browse image in the default viewer."""
+        scene = self._preview_scene
+        if not scene:
+            return
+        url = (scene.urls.get("browse_full") or scene.urls.get("browse")
+               or scene.urls.get("browse_native"))
+        if not url:
+            return
+        try:
+            QDesktopServices.openUrl(QUrl(url))
+        except Exception as exc:
+            QMessageBox.warning(self, tr("ui.warning"), str(exc))
 
     # ============================================================= Download
     def _on_download_clicked(self):
@@ -1033,6 +1282,7 @@ class NisarMainDialog(QDialog):
 
     # ================================================================ close
     def closeEvent(self, event):
+        self._clear_footprint_band()
         if self._handle is not None:
             try:
                 ReaderRegistry.close(self._handle)

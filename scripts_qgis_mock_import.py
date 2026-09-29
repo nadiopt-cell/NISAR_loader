@@ -57,8 +57,8 @@ QPushButton QComboBox QTableWidget QTableWidgetItem QHeaderView
 QFileDialog QCheckBox QFormLayout QMessageBox QGroupBox QApplication
 QTextBrowser QAction
 """.split()
-_qtcore_names = "Qt pyqtSignal QObject QSize QCoreApplication".split()
-_qtgui_names = "QIcon QColor QFont".split()
+_qtcore_names = "Qt pyqtSignal QObject QSize QCoreApplication QUrl".split()
+_qtgui_names = "QIcon QColor QFont QPixmap QDesktopServices".split()
 
 _fake_module("qgis", [])
 _fake_module("qgis.PyQt", [])
@@ -70,13 +70,13 @@ _fake_module("qgis.PyQt.QtGui", _qtgui_names)
 _qgis_core_names = """
 QgsApplication QgsMessageLog QgsTask QgsProject QgsRasterLayer
 QgsCoordinateReferenceSystem QgsCoordinateTransform QgsGeometry
-QgsRectangle QgsProcessingProvider QgsProcessingAlgorithm
+QgsRectangle QgsWkbTypes QgsProcessingProvider QgsProcessingAlgorithm
 QgsProcessingParameterFile QgsProcessingParameterString
 QgsProcessingParameterBoolean QgsProcessingParameterRasterDestination
 QgsProcessingException QgsRasterMinMaxOrigin QgsLayerMetadata QgsSettings
 """.split()
 _fake_module("qgis.core", _qgis_core_names)
-_fake_module("qgis.gui", ["QgsMessageBar", "QgisInterface"])
+_fake_module("qgis.gui", ["QgsMessageBar", "QgisInterface", "QgsRubberBand"])
 
 sys.path.insert(0, str(REPO))
 

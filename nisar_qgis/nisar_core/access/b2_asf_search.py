@@ -26,6 +26,7 @@ except ImportError:  # pragma: no cover - optional dependency
     ASF_SEARCH_AVAILABLE = False
 
 from .base import BaseAccessBackend, AccessRegistry, DownloadProgress
+from .preview import pick_browse_urls
 from ..models import (
     SceneRecord, SearchParameters, DataStatus, ProductType, Instrument,
     Polarization, ProductLevel,
@@ -129,7 +130,15 @@ class B2ASFSearchBackend(BaseAccessBackend):
 
             try:
                 logger.info("ASF search: %s", opts)
-                search_results = asf.search(**opts, session=self.session)
+                # asf_search 14.x search() has no 'session' kwarg (verified
+                # live: TypeError -> zero scenes, silently swallowed).
+                # The session is attached to ASFSearchOptions instead.
+                if self.session is not None:
+                    opts_obj = asf.ASFSearchOptions(**opts)
+                    opts_obj.session = self.session
+                    search_results = asf.search(opts=opts_obj)
+                else:
+                    search_results = asf.search(**opts)
             except Exception as exc:
                 logger.error("ASF search failed for %s: %s", level, exc)
                 continue
@@ -194,11 +203,28 @@ class B2ASFSearchBackend(BaseAccessBackend):
             url = props.get("url")
             if url:
                 urls["download"] = url
+
+            # Official browse/quicklook set: dedicated ``browse`` property
+            # (verified live 2026-09-29 — additionalUrls carries only
+            # kml/pdf/qa sidecars, never the browse PNGs).
+            browse = pick_browse_urls(props.get("browse"))
+            if browse["thumbnail"]:
+                urls["browse_thumbnail"] = browse["thumbnail"]
+                urls["browse"] = browse["thumbnail"]
+            if browse["full"]:
+                urls["browse_full"] = browse["full"]
+            if browse["native"]:
+                urls["browse_native"] = browse["native"]
+            if not urls.get("browse"):
+                # Legacy fallback: a PNG quicklook inside additionalUrls.
+                for extra in (props.get("additionalUrls") or []):
+                    low = str(extra).lower()
+                    if "browse" in low or low.endswith(".png"):
+                        urls.setdefault("browse", extra)
+                        break
             for extra in (props.get("additionalUrls") or []):
                 if "s3://" in str(extra):
                     urls["s3"] = extra
-                elif "browse" in str(extra).lower() or str(extra).lower().endswith(".png"):
-                    urls.setdefault("browse", extra)
             for s3 in (props.get("s3Urls") or []):
                 urls.setdefault("s3", s3)
 
@@ -231,6 +257,9 @@ class B2ASFSearchBackend(BaseAccessBackend):
                     "pgeVersion": props.get("pgeVersion", ""),
                     "pathNumber": props.get("pathNumber"),
                     "processingDate": props.get("processingDate", ""),
+                    # Full browse set for the preview panel (P2.5).
+                    "browse_urls": browse["all"],
+                    "browse_native_pol": browse["native_pol"],
                 },
             )
             return scene

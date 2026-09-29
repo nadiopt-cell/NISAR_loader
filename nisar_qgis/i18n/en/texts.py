@@ -41,6 +41,28 @@ I18N_EN = {
         "analysis and do not mix BETA and PROVISIONAL in one time series."),
     "ui.search.aoi_hint": "Click 'Use current map extent' to set the AOI.",
 
+    # Preview panel (P2.5 — preview before download)
+    "ui.preview.title": "Scene preview (before download)",
+    "ui.preview.hint": (
+        "Select a result row to preview the scene: quicklook image, "
+        "details and footprint on the map."),
+    "ui.preview.loading": "Loading quicklook...",
+    "ui.preview.unavailable": "No quicklook image available.",
+    "ui.preview.failed": "Quicklook failed: {error}",
+    "ui.preview.no_footprint": "Footprint unknown for this scene.",
+    "ui.preview.zoom": "Zoom to footprint",
+    "ui.preview.open_browse": "Open full image",
+    "ui.preview.detail_scene": "Scene",
+    "ui.preview.detail_product": "Product",
+    "ui.preview.detail_acquired": "Acquired (UTC)",
+    "ui.preview.detail_status": "Status",
+    "ui.preview.detail_size": "Download size",
+    "ui.preview.detail_pols": "Polarizations",
+    "ui.preview.detail_orbit": "Orbit",
+    "ui.preview.detail_frame": "Frame / path",
+    "ui.preview.detail_collection": "Collection",
+    "ui.preview.detail_bbox": "Footprint bbox (lon/lat)",
+
     # Download tab
     "ui.download.title": "Download queue",
     "ui.download.button": "Download selected scenes",

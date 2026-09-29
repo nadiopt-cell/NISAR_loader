@@ -41,6 +41,28 @@ I18N_RU = {
         "PROVISIONAL и не смешивайте BETA и PROVISIONAL в одном ряду данных."),
     "ui.search.aoi_hint": "Нажмите «Взять экстент карты», чтобы задать AOI.",
 
+    # Preview panel (P2.5 — preview before download)
+    "ui.preview.title": "Превью сцены (до скачивания)",
+    "ui.preview.hint": (
+        "Выберите строку результата, чтобы увидеть превью сцены: "
+        "quicklook-изображение, детали и границы на карте."),
+    "ui.preview.loading": "Загрузка quicklook...",
+    "ui.preview.unavailable": "Quicklook-изображение недоступно.",
+    "ui.preview.failed": "Не удалось загрузить quicklook: {error}",
+    "ui.preview.no_footprint": "Границы сцены неизвестны.",
+    "ui.preview.zoom": "К границам сцены",
+    "ui.preview.open_browse": "Открыть полное изображение",
+    "ui.preview.detail_scene": "Сцена",
+    "ui.preview.detail_product": "Продукт",
+    "ui.preview.detail_acquired": "Съёмка (UTC)",
+    "ui.preview.detail_status": "Статус",
+    "ui.preview.detail_size": "Размер скачивания",
+    "ui.preview.detail_pols": "Поляризации",
+    "ui.preview.detail_orbit": "Орбита",
+    "ui.preview.detail_frame": "Кадр / трек",
+    "ui.preview.detail_collection": "Коллекция",
+    "ui.preview.detail_bbox": "Границы (долгота/ширина)",
+
     # Download tab
     "ui.download.title": "Очередь скачивания",
     "ui.download.button": "Скачать выбранные сцены",

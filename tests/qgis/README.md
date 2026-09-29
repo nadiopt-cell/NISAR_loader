@@ -16,11 +16,16 @@ qgis_process --version  # sanity check
 
 Minimum manual acceptance (TZ §2, MVP):
 
-1. Install the plugin from `nisar_qgis_plugin_v0.2.0.zip`
+1. Install the plugin from `nisar_qgis_plugin_v0.2.2.zip`
    (Plugins → Manage and Install Plugins → Install from ZIP).
 2. Menu «NISAR Vegetation» / toolbar button opens the dialog.
 3. Search tab: set map extent, dates, GCOV → results table appears,
    GUI stays responsive, search can be stopped.
+3a. Preview: click a result row → quicklook thumbnail loads (no ~/.netrc
+   needed), details show orbit/frame/pols/size, a yellow footprint
+   polygon appears on the map canvas; double-click the row (or
+   «Zoom to footprint») zooms the map to the scene; «Open full image»
+   opens the full-resolution browse PNG in the default viewer.
 4. Download tab: select a scene, download (needs ~/.netrc with
    Earthdata credentials).
 5. Open tab: inspect the downloaded .h5 → layers HHHH/HVHV appear;
