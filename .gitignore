@@ -1,0 +1,31 @@
+# Never commit real NISAR products (multi-GB .h5)
+*.h5
+*.hdf5
+*.he5
+!tests/data/*.h5
+
+# PAM sidecars / GDAL artifacts
+*.aux.xml
+*.aux
+*.tif.aux.xml
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.venv/
+venv/
+
+# Caches & exports
+nisar_qgis/cache/
+*.log
+.DS_Store
+
+# Editors
+.idea/
+.vscode/
+*.swp
