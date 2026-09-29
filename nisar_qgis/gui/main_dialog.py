@@ -756,15 +756,16 @@ class NisarMainDialog(QDialog):
             out_path = cache_dir / ("%s_%s.tif" % (base, name))
             task = NisarExportTask(handle, name, out_path,
                                    config_as_dict(self.config), cog=False)
-            task.signals.finished_ok.connect(self._on_layer_exported)
-            task.signals.finished_error.connect(self._on_export_error)
             task.setProperty("layer_name", name)
             task.setProperty("group_base", base)
+            task.signals.finished_ok.connect(
+                lambda result, t=task: self._on_layer_exported(t, result))
+            task.signals.finished_error.connect(
+                lambda message, t=task: self._on_export_error(message))
             self._tasks.append(task)
             QgsApplication.taskManager().addTask(task)
 
-    def _on_layer_exported(self, result):
-        task = self.sender()
+    def _on_layer_exported(self, task, result):
         layer_name = task.property("layer_name") or "layer"
         group_base = task.property("group_base") or "NISAR"
         self.add_layers_btn.setEnabled(True)
@@ -904,14 +905,15 @@ class NisarMainDialog(QDialog):
         self.run_process_btn.setText(tr("ui.process.running"))
         task = NisarComputeTask(self._handle, preset_id, out_path,
                                 config_as_dict(self.config))
-        task.signals.finished_ok.connect(self._on_process_done)
-        task.signals.finished_error.connect(self._on_process_error)
         task.setProperty("preset_id", preset_id)
+        task.signals.finished_ok.connect(
+            lambda result, t=task: self._on_process_done(t, result))
+        task.signals.finished_error.connect(
+            lambda message: self._on_process_error(message))
         self._tasks.append(task)
         QgsApplication.taskManager().addTask(task)
 
-    def _on_process_done(self, result):
-        task = self.sender()
+    def _on_process_done(self, task, result):
         preset_id = task.property("preset_id") or "index"
         self.run_process_btn.setEnabled(True)
         self.run_process_btn.setText(tr("ui.process.run"))
