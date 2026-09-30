@@ -29,7 +29,7 @@ QGIS 4.x (только `qgis.PyQt`). **Валидирован на реальн�
 ## Установка
 
 1. QGIS → **Plugins → Manage and Install Plugins → Install from ZIP** →
-   выбрать `nisar_qgis_plugin_v0.2.2.zip`.
+   выбрать `nisar_qgis_plugin_v0.3.0.zip`.
 2. Появится тулбар «NISAR Vegetation» и пункт меню. Processing-алгоритмы —
    в Toolbox под группой «NISAR Vegetation».
 
