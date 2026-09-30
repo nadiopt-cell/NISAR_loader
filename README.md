@@ -4,11 +4,13 @@
 в QGIS: мониторинг растительности (HV в дБ, cross-ratio, RVI), обнаружение
 ветровалов (DiD когерентности), экспорт в GeoTIFF/COG.
 
-**Статус:** experimental MVP (v0.3.0). Совместимость: QGIS 3.28 LTR+ и
-QGIS 4.x (только `qgis.PyQt`). **Валидирован на реальных гранулах**
-(GCOV: поиск → скачивание → чтение → индексы; GUNW: пара 12-суточных
-интерферограмм → DiD-конвейер ветровалов; детали —
-`docs/product_notes.md`).
+**Статус:** experimental MVP (v0.3.1). Совместимость: QGIS 3.28 LTR+ и
+QGIS 4.x (только `qgis.PyQt`). **Валидирован на реальных гранулах в
+реальном QGIS 3.44** (qgis_process + GUI offscreen: GCOV → индексы;
+GUNW-пара → DiD-ветровалы с маской Hansen GFC — цифры совпадают с
+ре-прогоном P3.1; детали — `docs/product_notes.md` и
+`RELEASE_NOTES_v0.3.1.md`). Headless: плагин стартует через
+`initProcessing()` и полностью работает из `qgis_process`.
 
 ## Возможности
 
@@ -29,7 +31,7 @@ QGIS 4.x (только `qgis.PyQt`). **Валидирован на реальн�
 ## Установка
 
 1. QGIS → **Plugins → Manage and Install Plugins → Install from ZIP** →
-   выбрать `nisar_qgis_plugin_v0.3.0.zip`.
+   выбрать `nisar_qgis_plugin_v0.3.1.zip`.
 2. Появится тулбар «NISAR Vegetation» и пункт меню. Processing-алгоритмы —
    в Toolbox под группой «NISAR Vegetation».
 

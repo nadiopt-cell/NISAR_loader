@@ -9,6 +9,7 @@ from qgis.PyQt.QtGui import QIcon
 from qgis.core import QgsApplication, QgsMessageLog
 
 from .provider import NisarProvider
+from .qt_compat import LEVEL_INFO, LEVEL_WARNING
 
 
 def _plugin_icon() -> QIcon:
@@ -32,15 +33,21 @@ class NisarPlugin:
         self.toolbar = None
         self.actions = []
 
+    def _register_provider(self):
+        """Create and register the Processing provider (idempotent)."""
+        if self.provider is not None:
+            return
+        self.provider = NisarProvider()
+        QgsApplication.processingRegistry().addProvider(self.provider)
+
     def initGui(self):
         """Initialize GUI: toolbar, menu, processing provider."""
         try:
-            self.provider = NisarProvider()
-            QgsApplication.processingRegistry().addProvider(self.provider)
+            self._register_provider()
         except Exception as exc:  # pragma: no cover - defensive
             QgsMessageLog.logMessage(
                 "Failed to register Processing provider: %s" % exc,
-                "NISAR", level=QgsMessageLog.WARNING)
+                "NISAR", level=LEVEL_WARNING)
 
         self.toolbar = self.iface.addToolBar(self.TOOLBAR_NAME)
         self.toolbar.setObjectName("NisarVegetationToolbar")
@@ -54,7 +61,7 @@ class NisarPlugin:
 
         QgsMessageLog.logMessage(
             "NISAR Vegetation plugin loaded (v%s)" % _version(),
-            "NISAR", level=QgsMessageLog.INFO)
+            "NISAR", level=LEVEL_INFO)
 
     def unload(self):
         """Unload plugin: remove provider, toolbar, menu."""
@@ -75,7 +82,14 @@ class NisarPlugin:
             self.dialog = None
 
         QgsMessageLog.logMessage(
-            "NISAR Vegetation plugin unloaded", "NISAR", level=QgsMessageLog.INFO)
+            "NISAR Vegetation plugin unloaded", "NISAR", level=LEVEL_INFO)
+
+    def initProcessing(self):
+        """Headless startup: register the provider only (qgis_process).
+
+        Called by QGIS instead of initGui() when the plugin is started
+        from qgis_process (no main window / iface available)."""
+        self._register_provider()
 
     def show_dialog(self):
         """Show (or create) the main plugin dialog."""

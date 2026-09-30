@@ -72,6 +72,7 @@ class NisarMainDialog(QDialog):
         self._scenes = []              # last search results
         self._tasks = []               # keep references to running tasks
         self._tr_widgets = []          # (widget, key, attr) retranslation
+        self._tab_keys = []            # tab i18n keys, parallel to tabs
         self._layer_checkboxes = {}    # row -> QCheckBox
         self._preview_scene = None     # scene shown in the preview panel
         self._preview_task = None      # running thumbnail fetch (P2.5)
@@ -105,6 +106,7 @@ class NisarMainDialog(QDialog):
                 (self.tab_export, "ui.tab_export"),
                 (self.tab_settings, "ui.tab_settings")):
             idx = self.tabs.addTab(widget, key)
+            self._tab_keys.append(key)
             self.tabs.setTabText(idx, tr(key))
 
         layout.addWidget(self.tabs)
@@ -724,8 +726,10 @@ class NisarMainDialog(QDialog):
         self._tr_widgets.append((widget, key, attr))
 
     def _retranslate(self):
-        for i in range(self.tabs.count()):
-            key = self.tabs.tabData(i) or self.tabs.tabText(i)
+        # QTabWidget has no tabData()/setTabData() (those live on QTabBar,
+        # and no data was ever set here) — keys are kept in _tab_keys,
+        # parallel to the tab indices.
+        for i, key in enumerate(self._tab_keys):
             if str(key).startswith("ui."):
                 self.tabs.setTabText(i, tr(str(key)))
         for widget, key, attr in self._tr_widgets:

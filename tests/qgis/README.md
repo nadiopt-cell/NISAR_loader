@@ -14,9 +14,37 @@ qgis_process --version  # sanity check
 /path/to/qgis/python/bin/python -m pytest tests/qgis -v
 ```
 
+## Executed headless acceptance (2026-09-30, QGIS 3.44.14 offscreen)
+
+Record of a real (non-mocked) run — conda-forge QGIS 3.44.14,
+`QT_QPA_PLATFORM=offscreen`, plugin installed into a profile via
+`QGIS_CUSTOM_CONFIG_PATH`, started through `qgis_process`
+(this path requires the plugin's `initProcessing()`):
+
+```bash
+qgis_process plugins enable nisar_qgis      # -> "Enabled nisar_qgis"
+qgis_process list                           # -> 5 nisar:* algorithms
+qgis_process run nisar:hv_db --INPUT=<GCOV.h5> --OUTPUT=hv_db.tif
+qgis_process run nisar:rvi  --INPUT=<GCOV.h5> --OUTPUT=rvi.tif
+qgis_process run nisar:cross_ratio --INPUT=<GCOV.h5> --OUTPUT=cr.tif
+qgis_process run nisar:windthrow_did \
+  --STORM=<GUNW pair 1.h5> --CONTROL=<GUNW pair 2.h5> \
+  --EVENT_DATE=2026-07-01 --FOREST_MASK=true --THRESHOLD_MODE=0 \
+  --OUTPUT_DIR=<dir> --OUTPUT=<dir>/dcoh.tif
+```
+
+Results on real granules (see RELEASE_NOTES_v0.3.1.md for full numbers):
+indices -> valid Float32 GeoTIFF 4248x4167 @ 80 m; windthrow DiD
+reproduces the P3.1 re-run bit-for-bit without the forest mask
+(783 544 px / 501 468 ha / 3 993 objects) and completes with the
+online Hansen GFC forest mask (650 317 px / 416 203 ha / 3 973
+objects). GUI dialog smoke (7 tabs, offscreen QApplication) also
+passed. This run uncovered six API defects fixed in v0.3.1 —
+regression tests live in tests/unit/test_qgis_plugin_api.py.
+
 Minimum manual acceptance (TZ §2, MVP):
 
-1. Install the plugin from `nisar_qgis_plugin_v0.3.0.zip`
+1. Install the plugin from `nisar_qgis_plugin_v0.3.1.zip`
    (Plugins → Manage and Install Plugins → Install from ZIP).
 2. Menu «NISAR Vegetation» / toolbar button opens the dialog.
 3. Search tab: set map extent, dates, GCOV → results table appears,

@@ -43,6 +43,10 @@ class NisarWindthrowDidAlgorithm(QgsProcessingAlgorithm):
     def tr(self, string):
         return QCoreApplication.translate("NisarAlgorithms", string)
 
+    def createInstance(self):
+        # required by QGIS Processing (fresh instance for execution)
+        return type(self)()
+
     def name(self):
         return "windthrow_did"
 
@@ -133,7 +137,7 @@ class NisarWindthrowDidAlgorithm(QgsProcessingAlgorithm):
             threshold_mode=("mad" if mode_idx == 1 else "absolute"),
             a_coh=float(self.parameterAsDouble(parameters, "A_COH", context)),
             k_mad=float(self.parameterAsDouble(parameters, "K_MAD", context)),
-            min_pixels=int(self.parameterAsNumber(
+            min_pixels=int(self.parameterAsInt(
                 parameters, "MIN_PIXELS", context) or 6),
         )
 

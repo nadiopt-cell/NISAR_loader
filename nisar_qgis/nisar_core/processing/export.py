@@ -32,6 +32,8 @@ from ..models import ProductHandle, GeorefInfo, ProcessingResult
 
 logger = logging.getLogger("nisar.processing.export")
 
+_FLOAT_TYPES = ("Float16", "Float32", "Float64")
+
 _GDAL_DTYPES = {
     "Byte": gdal.GDT_Byte if GDAL_AVAILABLE else 1,
     "Int16": gdal.GDT_Int16 if GDAL_AVAILABLE else 3,
@@ -67,6 +69,20 @@ class ExportBackend:
         self.big_tiff = self.config.get("big_tiff", "IF_SAFER")
         self.cog = self.config.get("cog", False)
 
+    def _effective_predictor(self, dtype: str) -> int:
+        """PREDICTOR usable for this dtype.
+
+        PREDICTOR=3 (floating-point predictor) is only valid for float
+        rasters — GDAL refuses to create e.g. a Byte mask with it
+        ("PREDICTOR=3 is only supported with Float16, Float32 or
+        Float64", caught live in QGIS 3.44.14 / GDAL 3.13). Integer
+        rasters fall back to horizontal differencing (2). The rasterio
+        fallback path has always done this; now the GDAL path matches.
+        """
+        if dtype in _FLOAT_TYPES:
+            return self.predictor
+        return 2 if self.predictor == 3 else self.predictor
+
     # ------------------------------------------------------------- creation
     def create_dataset(self, output_path: str, width: int, height: int,
                        dtype: str, georef: GeorefInfo,
@@ -82,7 +98,7 @@ class ExportBackend:
             "TILED=%s" % ("YES" if self.tiled else "NO"),
             "BLOCKXSIZE=%d" % self.block_size,
             "BLOCKYSIZE=%d" % self.block_size,
-            "PREDICTOR=%d" % self.predictor,
+            "PREDICTOR=%d" % self._effective_predictor(dtype),
             "BIGTIFF=%s" % self.big_tiff,
         ]
         try:

@@ -13,6 +13,8 @@ from pathlib import Path
 from qgis.PyQt.QtCore import QObject, pyqtSignal
 from qgis.core import QgsTask, QgsMessageLog
 
+from ..qt_compat import LEVEL_INFO, LEVEL_WARNING
+
 from ..nisar_core.access.base import DownloadProgress
 from ..nisar_core.models import SceneRecord, SearchParameters
 
@@ -61,7 +63,7 @@ class NisarSearchTask(QgsTask):
         else:
             msg = getattr(self, "_error", "Search failed")
             QgsMessageLog.logMessage("NISAR search failed: %s" % msg,
-                                     "NISAR", level=QgsMessageLog.WARNING)
+                                     "NISAR", level=LEVEL_WARNING)
             self.signals.finished_error.emit(msg)
 
 
@@ -102,7 +104,7 @@ class NisarDownloadTask(QgsTask):
         if success:
             QgsMessageLog.logMessage(
                 "Downloaded %s -> %s" % (self.scene.scene_id, self._path),
-                "NISAR", level=QgsMessageLog.INFO)
+                "NISAR", level=LEVEL_INFO)
             self.signals.finished_ok.emit(
                 DownloadProgress(scene_id=self.scene.scene_id,
                                  bytes_downloaded=self.scene.size_bytes,
@@ -157,7 +159,7 @@ class NisarComputeTask(QgsTask):
             if getattr(self, "_result", None) and self._result.error_message:
                 msg = self._result.error_message
             QgsMessageLog.logMessage("NISAR processing failed: %s" % msg,
-                                     "NISAR", level=QgsMessageLog.WARNING)
+                                     "NISAR", level=LEVEL_WARNING)
             self.signals.finished_error.emit(msg)
 
 
@@ -280,7 +282,7 @@ class NisarWindthrowTask(QgsTask):
             if getattr(self, "_result", None) and self._result.error_message:
                 msg = self._result.error_message
             QgsMessageLog.logMessage("NISAR windthrow DiD failed: %s" % msg,
-                                     "NISAR", level=QgsMessageLog.WARNING)
+                                     "NISAR", level=LEVEL_WARNING)
             self.signals.finished_error.emit(msg)
 
 

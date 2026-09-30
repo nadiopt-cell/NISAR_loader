@@ -43,6 +43,11 @@ class NisarAlgorithmBase(QgsProcessingAlgorithm):
     def tr(self, string):
         return QCoreApplication.translate("NisarAlgorithms", string)
 
+    def createInstance(self):
+        # required by QGIS Processing (fresh instance for execution);
+        # subclasses take no ctor arguments
+        return type(self)()
+
     def group(self):
         return self.tr("NISAR Vegetation")
 
