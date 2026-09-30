@@ -142,6 +142,10 @@ def test_detect_windthrow_finds_damage(gunw_storm, gunw_control,
 
         detection = detect_windthrow(result.dcoh, bg, result.valid,
                                      WindthrowParams())
+        # default "absolute" mode (reference plugin v1.2.1): median + a_coh
+        detection_mad = detect_windthrow(
+            result.dcoh, bg, result.valid,
+            WindthrowParams(threshold_mode="mad", k_mad=0.25))
         # the damage block must be recovered (allowing edge erosion)
         det = detection.mask
         overlap = (det & gunw_damage_mask).sum()
@@ -155,11 +159,16 @@ def test_detect_windthrow_finds_damage(gunw_storm, gunw_control,
         density_far = (det & far).sum() / max(far.sum(), 1)
         assert density_in > 2.0 * density_far
         assert detection.n_objects >= 1
-        # threshold rule
+        # threshold rule — default absolute mode (reference plugin)
         bg_vals = result.dcoh[bg]
-        expected = float(np.median(bg_vals)) + 0.25 * float(
+        expected_abs = float(np.median(bg_vals)) + 0.25
+        assert detection.threshold == pytest.approx(expected_abs, abs=1e-6)
+        # threshold rule — "mad" mode (article wording)
+        expected_mad = float(np.median(bg_vals)) + 0.25 * float(
             np.mean(np.abs(bg_vals - np.median(bg_vals))))
-        assert detection.threshold == pytest.approx(expected, abs=1e-6)
+        assert detection_mad.threshold == pytest.approx(expected_mad,
+                                                       abs=1e-6)
+        assert detection_mad.threshold < detection.threshold
     finally:
         ReaderRegistry.close(s)
         ReaderRegistry.close(c)
@@ -336,7 +345,9 @@ def test_run_windthrow_did_e2e(gunw_storm, gunw_control, tmp_path,
     assert report["method"].startswith("DiD")
     assert report["layer"] == "HH_coherenceMagnitude_80m"
     assert report["grid"]["width"] == GW and report["grid"]["height"] == GH
-    assert report["threshold"]["rule"] == "median(bg) + k*MAD(bg)"
+    assert report["threshold"]["mode"] == "absolute"
+    assert report["threshold"]["rule"].startswith("median(bg) + a_coh")
+    assert report["threshold"]["a_coh"] == 0.25
     assert report["detection"]["pixels"] > 0
     assert report["detection"]["objects"] >= 1
 
@@ -400,3 +411,30 @@ def test_find_coherence_layer_prefers_hh(gunw_storm):
         assert layer.metadata["posting_m"] == 80
     finally:
         ReaderRegistry.close(handle)
+
+
+def test_windthrow_params_invalid_mode():
+    with pytest.raises(ValueError):
+        WindthrowParams(threshold_mode="bogus")
+
+
+def test_detect_windthrow_absolute_vs_mad_sensitivity():
+    """a_coh mode is more conservative than k*MAD on a noisy background."""
+    rng = np.random.default_rng(3)
+    dcoh = rng.normal(0.0, 0.10, (60, 60)).astype(np.float32)
+    dcoh[20:30, 20:30] += 0.40          # damage signal
+    bg = np.ones((60, 60), dtype=bool)
+    bg[16:34, 16:34] = False
+    valid = np.ones((60, 60), dtype=bool)
+
+    det_abs = detect_windthrow(dcoh, bg, valid,
+                               WindthrowParams(threshold_mode="absolute"))
+    det_mad = detect_windthrow(dcoh, bg, valid,
+                               WindthrowParams(threshold_mode="mad"))
+    # the absolute threshold sits far above the k*MAD one on this scene
+    assert det_abs.threshold > det_mad.threshold
+    # ... and flags strictly fewer background pixels
+    far = np.ones_like(bg)
+    far[16:34, 16:34] = False
+    far[:10, :] = False
+    assert (det_abs.mask & far).sum() <= (det_mad.mask & far).sum()

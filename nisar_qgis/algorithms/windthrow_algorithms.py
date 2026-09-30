@@ -18,6 +18,7 @@ from qgis.core import (
     QgsProcessingParameterVectorLayer,
     QgsProcessingParameterNumber, QgsProcessingParameterBoolean,
     QgsProcessingParameterString, QgsProcessingParameterFolderDestination,
+    QgsProcessingParameterEnum,
     QgsProcessingException, QgsRasterLayer, QgsProject,
     QgsRasterMinMaxOrigin, QgsProcessingParameterFeatureSource,
 )
@@ -89,6 +90,14 @@ class NisarWindthrowDidAlgorithm(QgsProcessingAlgorithm):
             "FOREST_MASK", self.tr(
                 "Restrict to Hansen GFC forest (online tiles)"),
             defaultValue=False))
+        self.addParameter(QgsProcessingParameterEnum(
+            "THRESHOLD_MODE", self.tr("Threshold rule"),
+            options=[self.tr("median + a (reference plugin)"),
+                     self.tr("median + k*MAD (article)")],
+            defaultValue=0))
+        self.addParameter(QgsProcessingParameterNumber(
+            "A_COH", self.tr("Threshold: offset a (median + a)"),
+            type=QgsProcessingParameterNumber.Double, defaultValue=0.25))
         self.addParameter(QgsProcessingParameterNumber(
             "K_MAD", self.tr("Threshold: k (median + k*MAD)"),
             type=QgsProcessingParameterNumber.Double, defaultValue=0.25))
@@ -118,7 +127,11 @@ class NisarWindthrowDidAlgorithm(QgsProcessingAlgorithm):
                 raise QgsProcessingException(
                     "Invalid event date %r (expected YYYY-MM-DD)" % date_str)
 
+        mode_idx = int(self.parameterAsEnum(
+            parameters, "THRESHOLD_MODE", context) or 0)
         params = WindthrowParams(
+            threshold_mode=("mad" if mode_idx == 1 else "absolute"),
+            a_coh=float(self.parameterAsDouble(parameters, "A_COH", context)),
             k_mad=float(self.parameterAsDouble(parameters, "K_MAD", context)),
             min_pixels=int(self.parameterAsNumber(
                 parameters, "MIN_PIXELS", context) or 6),

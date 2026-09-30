@@ -15,9 +15,14 @@ the background level, so dcoh is positive there. The control pair
 subtracts both meteorological and phenological background decorrelation
 (difference-in-differences).
 
-Detector (per the validated configuration):
-  * adaptive threshold = median(background) + k * MAD(background),
-    k = 0.25 by default (MAD = mean absolute deviation from the median);
+Detector (per the validated configuration; two threshold modes):
+  * ``absolute`` (default, matches the reference PLUGIN v1.2.1 code and
+    its delivered detections): threshold = median(bg) + a_coh, with
+    a_coh = 0.25 in coherence units (~8-14% false-alarm rate on the
+    validated C-band events);
+  * ``mad`` (literal wording of the reference ARTICLE §2.3): threshold =
+    median(bg) + k * MAD(bg), k = 0.25 (MAD = mean absolute deviation
+    from the median) — a low, wide alert-layer threshold;
   * 3x3 median (majority) filtering of the binary detection;
   * minimum object size 6 pixels (~4 ha at 80 m posting).
 
@@ -50,9 +55,12 @@ from ..readers import ReaderRegistry
 logger = logging.getLogger("nisar.processing.windthrow")
 
 # ---------------------------------------------------------------------------
-# Validated defaults (sentinel1_windthrow study, §2 "Detector")
+# Validated defaults (sentinel1_windthrow study; cross-checked against the
+# reference plugin v1.2.1 sources — see docs/product_notes.md, "P3.1 audit")
 # ---------------------------------------------------------------------------
-DEFAULT_K_MAD = 0.25
+DEFAULT_THRESHOLD_MODE = "absolute"  # reference plugin code behaviour
+DEFAULT_A_COH = 0.25                  # absolute offset, coherence units
+DEFAULT_K_MAD = 0.25                 # MAD multiplier (article wording)
 DEFAULT_MIN_PIXELS = 6          # ~4 ha at 80 m posting
 DEFAULT_MEDIAN_SIZE = 3
 DEFAULT_RING_RADIUS_M = 10000.0  # background ring around the event
@@ -65,7 +73,17 @@ _GUNW_DT = re.compile(r"\d{8}T\d{6}")
 
 @dataclass
 class WindthrowParams:
-    """Detector parameters (validated defaults of the source study)."""
+    """Detector parameters (validated defaults of the source study).
+
+    ``threshold_mode`` selects the adaptive-threshold rule:
+      * ``"absolute"`` (default) — median(bg) + ``a_coh``; matches the
+        reference plugin v1.2.1 implementation and its delivered
+        detections (FPR ~8-14% on the validated events);
+      * ``"mad"`` — median(bg) + ``k_mad`` * MAD(bg); the literal
+        article wording, a wide low-threshold alert layer.
+    """
+    threshold_mode: str = DEFAULT_THRESHOLD_MODE
+    a_coh: float = DEFAULT_A_COH
     k_mad: float = DEFAULT_K_MAD
     min_pixels: int = DEFAULT_MIN_PIXELS
     median_size: int = DEFAULT_MEDIAN_SIZE
@@ -73,6 +91,12 @@ class WindthrowParams:
     forest_fraction: float = DEFAULT_FOREST_FRACTION
     outside_forest_threshold: float = DEFAULT_OUTSIDE_FOREST_THRESHOLD
     pre_coh_flag: float = DEFAULT_PRE_COH_FLAG
+
+    def __post_init__(self):
+        if self.threshold_mode not in ("absolute", "mad"):
+            raise ValueError(
+                "threshold_mode must be 'absolute' or 'mad', got %r"
+                % (self.threshold_mode,))
 
 
 # ---------------------------------------------------------------------------
@@ -321,10 +345,23 @@ def compute_dcoh(storm: ProductHandle, control: ProductHandle,
     reader_s = backend._get_reader(storm)
     reader_c = backend._get_reader(control)
 
-    gamma_s = backend._read_full_tiled(storm, storm_layer.name, reader_s)
-    gamma_c = backend._read_full_tiled(control, control_layer.name, reader_c)
-    gamma_s = np.asarray(gamma_s, dtype=np.float32)
-    gamma_c = np.asarray(gamma_c, dtype=np.float32)
+    def _read_full(handle, layer, reader):
+        """Single-shot full-layer read (80 m GUNW grid is ~80 MB).
+
+        Tiled reading (~324 windowed h5py reads per layer) costs minutes
+        on chunked GUNW datasets; one contiguous window is seconds.
+        """
+        height, width = layer.shape[0], layer.shape[1]
+        tile = reader.read_window(handle, layer.name,
+                                  (0, 0, width, height))
+        if tile.ndim == 3:
+            tile = tile[0]
+        return tile
+
+    gamma_s = np.asarray(_read_full(storm, storm_layer, reader_s),
+                         dtype=np.float32)
+    gamma_c = np.asarray(_read_full(control, control_layer, reader_c),
+                         dtype=np.float32)
 
     valid = np.isfinite(gamma_s) & np.isfinite(gamma_c)
     dcoh = gamma_c - gamma_s
@@ -557,8 +594,10 @@ def detect_windthrow(dcoh: np.ndarray, background: np.ndarray,
                      params: WindthrowParams = None) -> DetectionResult:
     """Adaptive-threshold detection of the DiD raster.
 
-    threshold = median(bg) + k * MAD(bg); the binary result is filtered
-    with a 3x3 median and objects smaller than ``min_pixels`` removed.
+    threshold mode ``absolute``: median(bg) + a_coh (reference plugin
+    v1.2.1); mode ``mad``: median(bg) + k_mad * MAD(bg) (article text).
+    The binary result is filtered with a 3x3 median and objects smaller
+    than ``min_pixels`` removed.
     """
     params = params or WindthrowParams()
     bg_vals = dcoh[background & valid & np.isfinite(dcoh)]
@@ -570,7 +609,10 @@ def detect_windthrow(dcoh: np.ndarray, background: np.ndarray,
 
     median_bg = float(np.median(bg_vals))
     mad_bg = float(np.mean(np.abs(bg_vals - median_bg)))
-    threshold = median_bg + params.k_mad * mad_bg
+    if params.threshold_mode == "mad":
+        threshold = median_bg + params.k_mad * mad_bg
+    else:  # "absolute" — reference plugin v1.2.1 behaviour
+        threshold = median_bg + params.a_coh
 
     candidate = np.zeros(dcoh.shape, dtype=bool)
     candidate[valid & np.isfinite(dcoh)] = \
@@ -794,7 +836,11 @@ def run_windthrow_did(storm_path: str, control_path: str,
                 "mad_dcoh": detection.mad_bg,
             },
             "threshold": {
-                "rule": "median(bg) + k*MAD(bg)",
+                "rule": ("median(bg) + a_coh (absolute, reference plugin)"
+                         if params.threshold_mode == "absolute"
+                         else "median(bg) + k*MAD(bg) (article wording)"),
+                "mode": params.threshold_mode,
+                "a_coh": params.a_coh,
                 "k": params.k_mad,
                 "value": detection.threshold,
             },

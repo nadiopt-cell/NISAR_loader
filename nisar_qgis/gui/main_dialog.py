@@ -376,8 +376,31 @@ class NisarMainDialog(QDialog):
         self.wt_event_date.setPlaceholderText("YYYY-MM-DD")
         form.addRow(tr("ui.windthrow.event_date"), self.wt_event_date)
 
+        self.wt_threshold_mode = QComboBox()
+        self.wt_threshold_mode.addItem(tr("ui.windthrow.mode_absolute"),
+                                       "absolute")
+        self.wt_threshold_mode.addItem(tr("ui.windthrow.mode_mad"), "mad")
+        form.addRow(tr("ui.windthrow.threshold_mode"),
+                    self.wt_threshold_mode)
+
+        self.wt_a_coh = QLineEdit("0.25")
+        self.wt_a_coh.setEnabled(False)
+        form.addRow(tr("ui.windthrow.a_coh"), self.wt_a_coh)
+
         self.wt_k_mad = QLineEdit("0.25")
+        self.wt_k_mad.setEnabled(False)
         form.addRow(tr("ui.windthrow.k_mad"), self.wt_k_mad)
+
+        def _sync_threshold_fields(mode: str):
+            self.wt_a_coh.setEnabled(mode == "absolute")
+            self.wt_k_mad.setEnabled(mode == "mad")
+
+        self.wt_threshold_mode.currentIndexChanged.connect(
+            lambda _:
+            _sync_threshold_fields(
+                self.wt_threshold_mode.currentData() or "absolute"))
+        _sync_threshold_fields("absolute")
+
         self.wt_min_pixels = QLineEdit("6")
         form.addRow(tr("ui.windthrow.min_pixels"), self.wt_min_pixels)
 
@@ -485,7 +508,10 @@ class NisarMainDialog(QDialog):
                 tr("ui.windthrow.pair_warning").format(warning=warning))
 
         try:
+            mode = self.wt_threshold_mode.currentData() or "absolute"
             params = WindthrowParams(
+                threshold_mode=mode,
+                a_coh=float(self.wt_a_coh.text().strip() or 0.25),
                 k_mad=float(self.wt_k_mad.text().strip() or 0.25),
                 min_pixels=int(self.wt_min_pixels.text().strip() or 6))
         except ValueError:
