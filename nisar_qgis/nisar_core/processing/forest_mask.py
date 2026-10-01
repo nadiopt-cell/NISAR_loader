@@ -285,22 +285,38 @@ def _forest_fraction_rasterio(georef: GeorefInfo, year: int, bbox_wgs84,
 
         forest30 = hansen_forest_mask_year(
             tc, ly, year, exclude_loss_year=exclude_loss_year)
-        f32 = forest30.astype(np.float32)
-        ones = np.ones_like(f32)
-        # init_dest_nodata=False is ESSENTIAL: with the default True every
-        # call would zero the shared accumulators and wipe the previous
-        # tile's contribution (verified live — the bug produced an
-        # all-zero mask).
-        reproject(source=f32, destination=num,
-                  src_transform=src_transform, src_crs=src_crs,
-                  dst_transform=dst_transform, dst_crs=dst_crs,
-                  resampling=Resampling.sum, num_threads=2,
-                  init_dest_nodata=False)
-        reproject(source=ones, destination=den,
-                  src_transform=src_transform, src_crs=src_crs,
-                  dst_transform=dst_transform, dst_crs=dst_crs,
-                  resampling=Resampling.sum, num_threads=2,
-                  init_dest_nodata=False)
+        del tc, ly  # free 2x window bytes before warping
+        # Strip-wise warping (v0.3.2 forest-fix): full-window float32 source
+        # arrays (forest + ones, 4 bytes/px each) peaked ~2 GB per Hansen
+        # tile and OOM-killed multi-tile scenes (validated live on GUNW
+        # frames whose WGS84 bbox spans 2+ tiles, e.g. trk 93D fr 058).
+        # Strips of ~64 MB bound the peak; accumulation across strips and
+        # tiles stays exact because Resampling.sum adds each source pixel
+        # into its destination exactly once.
+        from affine import Affine as _Affine
+        n_rows = forest30.shape[0]
+        strip_rows = max(1, int(2 ** 24 // max(1, forest30.shape[1])))
+        for r0 in range(0, n_rows, strip_rows):
+            r1 = min(r0 + strip_rows, n_rows)
+            sub_tr = src_transform * _Affine.translation(0, r0)
+            f32 = forest30[r0:r1].astype(np.float32)
+            ones = np.ones_like(f32)
+            # init_dest_nodata=False is ESSENTIAL: with the default True
+            # every call would zero the shared accumulators and wipe the
+            # previous strip/tile contribution (verified live — the bug
+            # produced an all-zero mask).
+            reproject(source=f32, destination=num,
+                      src_transform=sub_tr, src_crs=src_crs,
+                      dst_transform=dst_transform, dst_crs=dst_crs,
+                      resampling=Resampling.sum, num_threads=2,
+                      init_dest_nodata=False)
+            reproject(source=ones, destination=den,
+                      src_transform=sub_tr, src_crs=src_crs,
+                      dst_transform=dst_transform, dst_crs=dst_crs,
+                      resampling=Resampling.sum, num_threads=2,
+                      init_dest_nodata=False)
+            del f32, ones
+        del forest30
         used_any = True
 
     if not used_any:

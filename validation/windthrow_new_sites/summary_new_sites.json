@@ -1,0 +1,915 @@
+{
+ "method": "NISAR L-band GUNW DiD (gamma_control - gamma_storm, 12/24-суточные пары, 80 м coherenceMagnitude HH), плагин NISAR_loader v0.3.1 (живой run_windthrow_did); порог absolute = median(bg)+0.25, медиана 3x3, мин 6 px",
+ "ground_truth": "БД Шихова ветровалы_3316 (2026-09-06), новые события NISAR-эры, не входившие в прошлую валидацию (karpinsk/sverdlovsk/kostroma/velsk)",
+ "protocol": "ref_mask = растеризованные полигоны событий шторм-интервала (t0, t1] в кадре; лес Hansen GFC@2026 (доля 30-м лесных пикселей >= 0.5); метрики: пиксельные (лес&валид), локальные 3 км, объектные IoU>=0.5",
+ "retest_karpinsk": {
+  "best_iou_4251": 0.1556,
+  "expected_best_iou_4251": 0.1556,
+  "note": "ретест скрипта на уцелевшей паре трк093D фр058 воспроизвёл best_iou прошлой сессии до 4-го знака"
+ },
+ "sites": [
+  {
+   "site": "nnov_sukhona",
+   "label": "Нижегородская шквал 05.07.2026 (4275: 373 га; 4276: 31 га)",
+   "storm_pair": [
+    "2026-07-03",
+    "2026-07-15"
+   ],
+   "control_pair": [
+    "2026-07-15",
+    "2026-07-27"
+   ],
+   "track": "99A",
+   "frame": 30,
+   "grid": {
+    "width": 4716,
+    "height": 4698,
+    "crs": "EPSG:32638",
+    "pixel_size_m": 80.0
+   },
+   "event_ids": [
+    4275,
+    4276,
+    4279,
+    4281,
+    4282,
+    4283
+   ],
+   "events": {
+    "4275": {
+     "type": "шквал",
+     "date": "2026-07-05",
+     "area_ha": 373.022708271,
+     "region": "Нижегородская область",
+     "n_poly": 1
+    },
+    "4276": {
+     "type": "шквал",
+     "date": "2026-07-05",
+     "area_ha": 31.3077784623,
+     "region": "Нижегородская область",
+     "n_poly": 1
+    },
+    "4279": {
+     "type": "шквал",
+     "date": "2026-07-05",
+     "area_ha": 164.007599947,
+     "region": "Нижегородская область",
+     "n_poly": 1
+    },
+    "4281": {
+     "type": "смерч",
+     "date": "2026-07-05",
+     "area_ha": 7.59373066381,
+     "region": "Нижегородская область",
+     "n_poly": 1
+    },
+    "4282": {
+     "type": "шквал",
+     "date": "2026-07-05",
+     "area_ha": 78.6451150011,
+     "region": "Нижегородская область",
+     "n_poly": 1
+    },
+    "4283": {
+     "type": "шквал",
+     "date": "2026-07-05",
+     "area_ha": 49.3584214682,
+     "region": "Нижегородская область",
+     "n_poly": 1
+    }
+   },
+   "threshold": 0.35897747427225113,
+   "detection": {
+    "pixels": 1426,
+    "area_ha": 912.64,
+    "objects": 49,
+    "min_pixels_per_object": 6,
+    "median_filter": "3x3"
+   },
+   "signal": {
+    "n_ref": 739,
+    "n_bg": 121666,
+    "excess": 0.13411247730255127,
+    "auc": 0.8066452897167153,
+    "tpr_fpr05": 0.2313937753721245
+   },
+   "background": {
+    "n_pixels": 121666,
+    "median_dcoh": 0.10897747427225113,
+    "mad_dcoh": 0.08736158907413483
+   },
+   "pixel_metrics": {
+    "tp": 5,
+    "fp": 1407,
+    "fn": 729,
+    "precision": 0.0035,
+    "recall": 0.0068,
+    "f1": 0.0047,
+    "iou": 0.0023
+   },
+   "pixel_local3km": {
+    "tp": 5,
+    "fp": 594,
+    "fn": 734,
+    "precision": 0.0083,
+    "recall": 0.0068,
+    "f1": 0.0075,
+    "iou": 0.0038
+   },
+   "object_metrics": {
+    "n_det_objects": 49,
+    "n_ref_events": 6,
+    "events_matched": 0,
+    "det_objects_matched": 0,
+    "precision": 0.0,
+    "recall": 0.0,
+    "f1": 0.0,
+    "per_event": {
+     "4275": {
+      "px": 579,
+      "best_iou": 0.0086,
+      "matched": false,
+      "overlap_share": 0.0086,
+      "det_px_overlapping": 5
+     },
+     "4276": {
+      "px": 45,
+      "best_iou": 0.0,
+      "matched": false,
+      "overlap_share": 0.0,
+      "det_px_overlapping": 0
+     },
+     "4279": {
+      "px": 55,
+      "best_iou": 0.0,
+      "matched": false,
+      "overlap_share": 0.0,
+      "det_px_overlapping": 0
+     },
+     "4281": {
+      "px": 12,
+      "best_iou": 0.0,
+      "matched": false,
+      "overlap_share": 0.0,
+      "det_px_overlapping": 0
+     },
+     "4282": {
+      "px": 127,
+      "best_iou": 0.0,
+      "matched": false,
+      "overlap_share": 0.0,
+      "det_px_overlapping": 0
+     },
+     "4283": {
+      "px": 77,
+      "best_iou": 0.0,
+      "matched": false,
+      "overlap_share": 0.0,
+      "det_px_overlapping": 0
+     }
+    }
+   },
+   "per_event_best_iou": {
+    "4275": 0.0086,
+    "4276": 0.0,
+    "4279": 0.0,
+    "4281": 0.0,
+    "4282": 0.0,
+    "4283": 0.0
+   },
+   "per_event_overlap": {
+    "4275": 0.0086,
+    "4276": 0.0,
+    "4279": 0.0,
+    "4281": 0.0,
+    "4282": 0.0,
+    "4283": 0.0
+   },
+   "flags": [],
+   "parasitic_events_in_control": []
+  },
+  {
+   "site": "kostroma_108",
+   "label": "Костромская+Нижегородская 05.07.2026 (4267/4271/4268/4282/4283)",
+   "storm_pair": [
+    "2026-07-03",
+    "2026-07-15"
+   ],
+   "control_pair": [
+    "2026-07-15",
+    "2026-07-27"
+   ],
+   "track": "108D",
+   "frame": 59,
+   "grid": {
+    "width": 4761,
+    "height": 4752,
+    "crs": "EPSG:32638",
+    "pixel_size_m": 80.0
+   },
+   "event_ids": [
+    4266,
+    4267,
+    4268,
+    4269,
+    4270,
+    4271,
+    4272,
+    4273,
+    4275,
+    4276,
+    4277,
+    4278,
+    4279,
+    4280,
+    4281,
+    4282,
+    4283,
+    4284,
+    4288,
+    4289,
+    4290,
+    4291
+   ],
+   "events": {
+    "4266": {
+     "type": "шквал",
+     "date": "2026-07-05",
+     "area_ha": 139.42498483,
+     "region": "Костромская область",
+     "n_poly": 1
+    },
+    "4267": {
+     "type": "смерч",
+     "date": "2026-07-05",
+     "area_ha": 97.7979517505,
+     "region": "Костромская область",
+     "n_poly": 1
+    },
+    "4268": {
+     "type": "смерч",
+     "date": "2026-07-05",
+     "area_ha": 68.7316706629,
+     "region": "Костромская область",
+     "n_poly": 1
+    },
+    "4269": {
+     "type": "смерч",
+     "date": "2026-07-05",
+     "area_ha": 179.656558639,
+     "region": "Костромская область",
+     "n_poly": 1
+    },
+    "4270": {
+     "type": "смерч",
+     "date": "2026-07-05",
+     "area_ha": 19.1420318368,
+     "region": "Костромская область",
+     "n_poly": 1
+    },
+    "4271": {
+     "type": "шквал",
+     "date": "2026-07-05",
+     "area_ha": 88.5748825872,
+     "region": "Костромская область",
+     "n_poly": 1
+    },
+    "4272": {
+     "type": "смерч",
+     "date": "2026-07-05",
+     "area_ha": 14.5406890548,
+     "region": "Костромская область",
+     "n_poly": 1
+    },
+    "4273": {
+     "type": "смерч",
+     "date": "2026-07-05",
+     "area_ha": 21.3723863803,
+     "region": "Костромская область",
+     "n_poly": 1
+    },
+    "4275": {
+     "type": "шквал",
+     "date": "2026-07-05",
+     "area_ha": 373.022708271,
+     "region": "Нижегородская область",
+     "n_poly": 1
+    },
+    "4276": {
+     "type": "шквал",
+     "date": "2026-07-05",
+     "area_ha": 31.3077784623,
+     "region": "Нижегородская область",
+     "n_poly": 1
+    },
+    "4277": {
+     "type": "смерч",
+     "date": "2026-07-05",
+     "area_ha": 9.15455351301,
+     "region": "Костромская область",
+     "n_poly": 1
+    },
+    "4278": {
+     "type": "шквал",
+     "date": "2026-07-05",
+     "area_ha": 32.1565995926,
+     "region": "Костромская область",
+     "n_poly": 1
+    },
+    "4279": {
+     "type": "шквал",
+     "date": "2026-07-05",
+     "area_ha": 164.007599947,
+     "region": "Нижегородская область",
+     "n_poly": 1
+    },
+    "4280": {
+     "type": "смерч",
+     "date": "2026-07-05",
+     "area_ha": 5.57367737692,
+     "region": "Нижегородская область",
+     "n_poly": 1
+    },
+    "4281": {
+     "type": "смерч",
+     "date": "2026-07-05",
+     "area_ha": 7.59373066381,
+     "region": "Нижегородская область",
+     "n_poly": 1
+    },
+    "4282": {
+     "type": "шквал",
+     "date": "2026-07-05",
+     "area_ha": 78.6451150011,
+     "region": "Нижегородская область",
+     "n_poly": 1
+    },
+    "4283": {
+     "type": "шквал",
+     "date": "2026-07-05",
+     "area_ha": 49.3584214682,
+     "region": "Нижегородская область",
+     "n_poly": 1
+    },
+    "4284": {
+     "type": "смерч",
+     "date": "2026-07-05",
+     "area_ha": 16.7249390935,
+     "region": "Вологодская область",
+     "n_poly": 1
+    },
+    "4288": {
+     "type": "смерч",
+     "date": "2026-07-05",
+     "area_ha": 24.6668025791,
+     "region": "Костромская область",
+     "n_poly": 1
+    },
+    "4289": {
+     "type": "смерч",
+     "date": "2026-07-05",
+     "area_ha": 9.45180370391,
+     "region": "Костромская область",
+     "n_poly": 1
+    },
+    "4290": {
+     "type": "смерч",
+     "date": "2026-07-05",
+     "area_ha": 11.1184023751,
+     "region": "Костромская область",
+     "n_poly": 1
+    },
+    "4291": {
+     "type": "смерч",
+     "date": "2026-07-05",
+     "area_ha": 12.2420544918,
+     "region": "Костромская область",
+     "n_poly": 1
+    }
+   },
+   "threshold": 0.34008172154426575,
+   "detection": {
+    "pixels": 180139,
+    "area_ha": 115288.96,
+    "objects": 2671,
+    "min_pixels_per_object": 6,
+    "median_filter": "3x3"
+   },
+   "signal": {
+    "n_ref": 1627,
+    "n_bg": 855401,
+    "excess": 0.28405603766441345,
+    "auc": 0.9196885943917351,
+    "tpr_fpr05": 0.6324523663183774
+   },
+   "background": {
+    "n_pixels": 855401,
+    "median_dcoh": 0.09008172154426575,
+    "mad_dcoh": 0.1263449341058731
+   },
+   "pixel_metrics": {
+    "tp": 648,
+    "fp": 173968,
+    "fn": 952,
+    "precision": 0.0037,
+    "recall": 0.405,
+    "f1": 0.0074,
+    "iou": 0.0037
+   },
+   "pixel_local3km": {
+    "tp": 652,
+    "fp": 6247,
+    "fn": 975,
+    "precision": 0.0945,
+    "recall": 0.4007,
+    "f1": 0.1529,
+    "iou": 0.0828
+   },
+   "object_metrics": {
+    "n_det_objects": 2671,
+    "n_ref_events": 22,
+    "events_matched": 1,
+    "det_objects_matched": 1,
+    "precision": 0.0004,
+    "recall": 0.0455,
+    "f1": 0.0007,
+    "per_event": {
+     "4266": {
+      "px": 223,
+      "best_iou": 0.1264,
+      "matched": false,
+      "overlap_share": 0.6771,
+      "det_px_overlapping": 151
+     },
+     "4267": {
+      "px": 146,
+      "best_iou": 0.1582,
+      "matched": false,
+      "overlap_share": 0.5137,
+      "det_px_overlapping": 75
+     },
+     "4268": {
+      "px": 106,
+      "best_iou": 0.1081,
+      "matched": false,
+      "overlap_share": 0.5189,
+      "det_px_overlapping": 55
+     },
+     "4269": {
+      "px": 286,
+      "best_iou": 0.1027,
+      "matched": false,
+      "overlap_share": 0.5979,
+      "det_px_overlapping": 171
+     },
+     "4270": {
+      "px": 32,
+      "best_iou": 0.0,
+      "matched": false,
+      "overlap_share": 0.0,
+      "det_px_overlapping": 0
+     },
+     "4271": {
+      "px": 129,
+      "best_iou": 0.092,
+      "matched": false,
+      "overlap_share": 0.5271,
+      "det_px_overlapping": 68
+     },
+     "4272": {
+      "px": 24,
+      "best_iou": 0.5588,
+      "matched": true,
+      "overlap_share": 0.7917,
+      "det_px_overlapping": 19
+     },
+     "4273": {
+      "px": 35,
+      "best_iou": 0.1923,
+      "matched": false,
+      "overlap_share": 0.5143,
+      "det_px_overlapping": 18
+     },
+     "4275": {
+      "px": 579,
+      "best_iou": 0.0,
+      "matched": false,
+      "overlap_share": 0.0,
+      "det_px_overlapping": 0
+     },
+     "4276": {
+      "px": 45,
+      "best_iou": 0.0,
+      "matched": false,
+      "overlap_share": 0.0,
+      "det_px_overlapping": 0
+     },
+     "4277": {
+      "px": 12,
+      "best_iou": 0.0,
+      "matched": false,
+      "overlap_share": 0.0,
+      "det_px_overlapping": 0
+     },
+     "4278": {
+      "px": 54,
+      "best_iou": 0.0,
+      "matched": false,
+      "overlap_share": 0.0,
+      "det_px_overlapping": 0
+     },
+     "4279": {
+      "px": 267,
+      "best_iou": 0.0262,
+      "matched": false,
+      "overlap_share": 0.0262,
+      "det_px_overlapping": 7
+     },
+     "4280": {
+      "px": 10,
+      "best_iou": 0.0,
+      "matched": false,
+      "overlap_share": 0.0,
+      "det_px_overlapping": 0
+     },
+     "4281": {
+      "px": 12,
+      "best_iou": 0.0,
+      "matched": false,
+      "overlap_share": 0.0,
+      "det_px_overlapping": 0
+     },
+     "4282": {
+      "px": 127,
+      "best_iou": 0.2109,
+      "matched": false,
+      "overlap_share": 0.315,
+      "det_px_overlapping": 40
+     },
+     "4283": {
+      "px": 77,
+      "best_iou": 0.1,
+      "matched": false,
+      "overlap_share": 0.4935,
+      "det_px_overlapping": 38
+     },
+     "4284": {
+      "px": 30,
+      "best_iou": 0.0,
+      "matched": false,
+      "overlap_share": 0.0,
+      "det_px_overlapping": 0
+     },
+     "4288": {
+      "px": 40,
+      "best_iou": 0.0,
+      "matched": false,
+      "overlap_share": 0.0,
+      "det_px_overlapping": 0
+     },
+     "4289": {
+      "px": 10,
+      "best_iou": 0.0,
+      "matched": false,
+      "overlap_share": 0.0,
+      "det_px_overlapping": 0
+     },
+     "4290": {
+      "px": 17,
+      "best_iou": 0.0,
+      "matched": false,
+      "overlap_share": 0.0,
+      "det_px_overlapping": 0
+     },
+     "4291": {
+      "px": 20,
+      "best_iou": 0.4,
+      "matched": false,
+      "overlap_share": 0.5,
+      "det_px_overlapping": 10
+     }
+    }
+   },
+   "per_event_best_iou": {
+    "4266": 0.1264,
+    "4267": 0.1582,
+    "4268": 0.1081,
+    "4269": 0.1027,
+    "4270": 0.0,
+    "4271": 0.092,
+    "4272": 0.5588,
+    "4273": 0.1923,
+    "4275": 0.0,
+    "4276": 0.0,
+    "4277": 0.0,
+    "4278": 0.0,
+    "4279": 0.0262,
+    "4280": 0.0,
+    "4281": 0.0,
+    "4282": 0.2109,
+    "4283": 0.1,
+    "4284": 0.0,
+    "4288": 0.0,
+    "4289": 0.0,
+    "4290": 0.0,
+    "4291": 0.4
+   },
+   "per_event_overlap": {
+    "4266": 0.6771,
+    "4267": 0.5137,
+    "4268": 0.5189,
+    "4269": 0.5979,
+    "4270": 0.0,
+    "4271": 0.5271,
+    "4272": 0.7917,
+    "4273": 0.5143,
+    "4275": 0.0,
+    "4276": 0.0,
+    "4277": 0.0,
+    "4278": 0.0,
+    "4279": 0.0262,
+    "4280": 0.0,
+    "4281": 0.0,
+    "4282": 0.315,
+    "4283": 0.4935,
+    "4284": 0.0,
+    "4288": 0.0,
+    "4289": 0.0,
+    "4290": 0.0,
+    "4291": 0.5
+   },
+   "flags": [],
+   "parasitic_events_in_control": []
+  },
+  {
+   "site": "kirov_slav",
+   "label": "Кировская шквалы 27.07.2026 (4344: 234 га; 4342: 136 га; 4343: 58 га)",
+   "storm_pair": [
+    "2026-07-23",
+    "2026-08-16"
+   ],
+   "control_pair": [
+    "2026-08-16",
+    "2026-09-09"
+   ],
+   "track": "41A",
+   "frame": 32,
+   "grid": {
+    "width": 4779,
+    "height": 4779,
+    "crs": "EPSG:32639",
+    "pixel_size_m": 80.0
+   },
+   "event_ids": [
+    4305,
+    4342,
+    4343,
+    4344
+   ],
+   "events": {
+    "4305": {
+     "type": "смерч",
+     "date": "2026-07-25",
+     "area_ha": 34.8492569908,
+     "region": "Коми",
+     "n_poly": 1
+    },
+    "4342": {
+     "type": "шквал",
+     "date": "2026-07-27",
+     "area_ha": 135.631624021,
+     "region": "Кировская область",
+     "n_poly": 1
+    },
+    "4343": {
+     "type": "шквал",
+     "date": "2026-07-27",
+     "area_ha": 58.3036627932,
+     "region": "Кировская область",
+     "n_poly": 1
+    },
+    "4344": {
+     "type": "шквал",
+     "date": "2026-07-27",
+     "area_ha": 233.585894357,
+     "region": "Кировская область",
+     "n_poly": 1
+    }
+   },
+   "threshold": 0.297848641872406,
+   "detection": {
+    "pixels": 21455,
+    "area_ha": 13731.2,
+    "objects": 652,
+    "min_pixels_per_object": 6,
+    "median_filter": "3x3"
+   },
+   "signal": {
+    "n_ref": 683,
+    "n_bg": 264727,
+    "excess": 0.3935425877571106,
+    "auc": 0.9680603722143856,
+    "tpr_fpr05": 0.8565153733528551
+   },
+   "background": {
+    "n_pixels": 264727,
+    "median_dcoh": 0.047848641872406006,
+    "mad_dcoh": 0.10667319595813751
+   },
+   "pixel_metrics": {
+    "tp": 560,
+    "fp": 20742,
+    "fn": 112,
+    "precision": 0.0263,
+    "recall": 0.8333,
+    "f1": 0.051,
+    "iou": 0.0262
+   },
+   "pixel_local3km": {
+    "tp": 562,
+    "fp": 9345,
+    "fn": 121,
+    "precision": 0.0567,
+    "recall": 0.8228,
+    "f1": 0.1061,
+    "iou": 0.056
+   },
+   "object_metrics": {
+    "n_det_objects": 652,
+    "n_ref_events": 4,
+    "events_matched": 0,
+    "det_objects_matched": 0,
+    "precision": 0.0,
+    "recall": 0.0,
+    "f1": 0.0,
+    "per_event": {
+     "4305": {
+      "px": 56,
+      "best_iou": 0.0,
+      "matched": false,
+      "overlap_share": 0.0,
+      "det_px_overlapping": 0
+     },
+     "4342": {
+      "px": 212,
+      "best_iou": 0.1295,
+      "matched": false,
+      "overlap_share": 0.9292,
+      "det_px_overlapping": 197
+     },
+     "4343": {
+      "px": 99,
+      "best_iou": 0.2427,
+      "matched": false,
+      "overlap_share": 0.3838,
+      "det_px_overlapping": 38
+     },
+     "4344": {
+      "px": 372,
+      "best_iou": 0.0654,
+      "matched": false,
+      "overlap_share": 0.879,
+      "det_px_overlapping": 327
+     }
+    }
+   },
+   "per_event_best_iou": {
+    "4305": 0.0,
+    "4342": 0.1295,
+    "4343": 0.2427,
+    "4344": 0.0654
+   },
+   "per_event_overlap": {
+    "4305": 0.0,
+    "4342": 0.9292,
+    "4343": 0.3838,
+    "4344": 0.879
+   },
+   "flags": [],
+   "parasitic_events_in_control": []
+  },
+  {
+   "site": "chelyabinsk",
+   "label": "Челябинская шквал 21.06.2026 (4265: 157 га)",
+   "storm_pair": [
+    "2026-06-20",
+    "2026-07-14"
+   ],
+   "control_pair": [
+    "2026-07-26",
+    "2026-08-19"
+   ],
+   "track": "84A",
+   "frame": 30,
+   "grid": {
+    "width": 4644,
+    "height": 4617,
+    "crs": "EPSG:32641",
+    "pixel_size_m": 80.0
+   },
+   "event_ids": [
+    4265,
+    4293
+   ],
+   "events": {
+    "4265": {
+     "type": "шквал",
+     "date": "2026-06-21",
+     "area_ha": 157.207178606,
+     "region": "Челябинская область",
+     "n_poly": 1
+    },
+    "4293": {
+     "type": "смерч",
+     "date": "2026-06-21",
+     "area_ha": 5.80129000486,
+     "region": "Башкортостан",
+     "n_poly": 1
+    }
+   },
+   "threshold": 0.42426371574401855,
+   "detection": {
+    "pixels": 199526,
+    "area_ha": 127696.64,
+    "objects": 1633,
+    "min_pixels_per_object": 6,
+    "median_filter": "3x3"
+   },
+   "signal": {
+    "n_ref": 253,
+    "n_bg": 28459,
+    "excess": 0.16190773248672485,
+    "auc": 0.8254236348886623,
+    "tpr_fpr05": 0.20948616600790515
+   },
+   "background": {
+    "n_pixels": 28459,
+    "median_dcoh": 0.17426371574401855,
+    "mad_dcoh": 0.11727175861597061
+   },
+   "pixel_metrics": {
+    "tp": 10,
+    "fp": 197169,
+    "fn": 243,
+    "precision": 0.0001,
+    "recall": 0.0395,
+    "f1": 0.0001,
+    "iou": 0.0001
+   },
+   "pixel_local3km": {
+    "tp": 10,
+    "fp": 91,
+    "fn": 243,
+    "precision": 0.099,
+    "recall": 0.0395,
+    "f1": 0.0565,
+    "iou": 0.0291
+   },
+   "object_metrics": {
+    "n_det_objects": 1633,
+    "n_ref_events": 2,
+    "events_matched": 0,
+    "det_objects_matched": 0,
+    "precision": 0.0,
+    "recall": 0.0,
+    "f1": 0.0,
+    "per_event": {
+     "4265": {
+      "px": 253,
+      "best_iou": 0.0237,
+      "matched": false,
+      "overlap_share": 0.0395,
+      "det_px_overlapping": 10
+     },
+     "4293": {
+      "px": 10,
+      "best_iou": 0.0,
+      "matched": false,
+      "overlap_share": 0.0,
+      "det_px_overlapping": 0
+     }
+    }
+   },
+   "per_event_best_iou": {
+    "4265": 0.0237,
+    "4293": 0.0
+   },
+   "per_event_overlap": {
+    "4265": 0.0395,
+    "4293": 0.0
+   },
+   "flags": [],
+   "parasitic_events_in_control": [
+    4322
+   ]
+  }
+ ],
+ "aggregate": {
+  "n_sites": 4,
+  "n_events_total": 34,
+  "n_events_signal_auc085": 2,
+  "events_matched_iou05": 1,
+  "events_total_iou05": 34
+ }
+}

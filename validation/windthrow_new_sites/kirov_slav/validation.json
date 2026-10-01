@@ -1,0 +1,181 @@
+{
+ "site": "kirov_slav",
+ "label": "Кировская шквалы 27.07.2026 (4344: 234 га; 4342: 136 га; 4343: 58 га)",
+ "storm": "NISAR_L2_PR_GUNW_026_041_A_032_028_2000_SH_20260723T005500_20260723T005536_20260816T005458_20260816T005534_P05023_N_F_J_001.h5",
+ "control": "NISAR_L2_PR_GUNW_028_041_A_032_030_2000_SH_20260816T005458_20260816T005534_20260909T005458_20260909T005534_P05023_N_F_J_001.h5",
+ "storm_interval": [
+  "2026-07-23",
+  "2026-08-16"
+ ],
+ "control_interval": [
+  "2026-08-16",
+  "2026-09-09"
+ ],
+ "track": "41A",
+ "frame": 32,
+ "event_date": "2026-07-25",
+ "event_ids": [
+  4305,
+  4342,
+  4343,
+  4344
+ ],
+ "events": {
+  "4305": {
+   "type": "смерч",
+   "date": "2026-07-25",
+   "area_ha": 34.8492569908,
+   "region": "Коми",
+   "n_poly": 1
+  },
+  "4342": {
+   "type": "шквал",
+   "date": "2026-07-27",
+   "area_ha": 135.631624021,
+   "region": "Кировская область",
+   "n_poly": 1
+  },
+  "4343": {
+   "type": "шквал",
+   "date": "2026-07-27",
+   "area_ha": 58.3036627932,
+   "region": "Кировская область",
+   "n_poly": 1
+  },
+  "4344": {
+   "type": "шквал",
+   "date": "2026-07-27",
+   "area_ha": 233.585894357,
+   "region": "Кировская область",
+   "n_poly": 1
+  }
+ },
+ "parasitic_events_in_control": [],
+ "forest_mask_used": true,
+ "forest_warnings": [],
+ "plugin_report": {
+  "method": "DiD coherence (gamma_control - gamma_storm)",
+  "storm_granule": "NISAR_L2_PR_GUNW_026_041_A_032_028_2000_SH_20260723T005500_20260723T005536_20260816T005458_20260816T005534_P05023_N_F_J_001.h5",
+  "control_granule": "NISAR_L2_PR_GUNW_028_041_A_032_030_2000_SH_20260816T005458_20260816T005534_20260909T005458_20260909T005534_P05023_N_F_J_001.h5",
+  "storm_pair": [
+   "2026-07-23T00:55:00",
+   "2026-08-16T00:54:58"
+  ],
+  "control_pair": [
+   "2026-08-16T00:54:58",
+   "2026-09-09T00:54:58"
+  ],
+  "event_date": "2026-07-25T00:00:00",
+  "layer": "HH_coherenceMagnitude_80m",
+  "polarization": "HH",
+  "grid": {
+   "width": 4779,
+   "height": 4779,
+   "crs": "EPSG:32639",
+   "pixel_size_m": 80.0
+  },
+  "background": {
+   "n_pixels": 264727,
+   "median_dcoh": 0.047848641872406006,
+   "mad_dcoh": 0.10667319595813751
+  },
+  "threshold": {
+   "rule": "median(bg) + a_coh (absolute, reference plugin)",
+   "mode": "absolute",
+   "a_coh": 0.25,
+   "k": 0.25,
+   "value": 0.297848641872406
+  },
+  "detection": {
+   "pixels": 21455,
+   "area_ha": 13731.2,
+   "objects": 652,
+   "min_pixels_per_object": 6,
+   "median_filter": "3x3"
+  },
+  "flags": [],
+  "forest_fraction_of_reference": 0.9838945827232797,
+  "metrics": {
+   "n_ref": 683,
+   "n_bg": 264727,
+   "excess": 0.3935425877571106,
+   "auc": 0.9680603722143856,
+   "tpr_fpr05": 0.8565153733528551
+  },
+  "warnings": [],
+  "params": {
+   "threshold_mode": "absolute",
+   "a_coh": 0.25,
+   "k_mad": 0.25,
+   "min_pixels": 6,
+   "median_size": 3,
+   "ring_radius_m": 10000.0,
+   "forest_fraction": 0.5,
+   "outside_forest_threshold": 0.3,
+   "pre_coh_flag": 0.6
+  },
+  "outputs": [
+   "/home/z/my-project/download/nisar_val_new/kirov_slav/dcoh.tif",
+   "/home/z/my-project/download/nisar_val_new/kirov_slav/windthrow_mask.tif",
+   "/home/z/my-project/download/nisar_val_new/kirov_slav/windthrow_report.json"
+  ]
+ },
+ "pixel_metrics": {
+  "tp": 560,
+  "fp": 20742,
+  "fn": 112,
+  "precision": 0.0263,
+  "recall": 0.8333,
+  "f1": 0.051,
+  "iou": 0.0262
+ },
+ "pixel_metrics_local_3km": {
+  "tp": 562,
+  "fp": 9345,
+  "fn": 121,
+  "precision": 0.0567,
+  "recall": 0.8228,
+  "f1": 0.1061,
+  "iou": 0.056
+ },
+ "object_metrics": {
+  "n_det_objects": 652,
+  "n_ref_events": 4,
+  "events_matched": 0,
+  "det_objects_matched": 0,
+  "precision": 0.0,
+  "recall": 0.0,
+  "f1": 0.0,
+  "per_event": {
+   "4305": {
+    "px": 56,
+    "best_iou": 0.0,
+    "matched": false,
+    "overlap_share": 0.0,
+    "det_px_overlapping": 0
+   },
+   "4342": {
+    "px": 212,
+    "best_iou": 0.1295,
+    "matched": false,
+    "overlap_share": 0.9292,
+    "det_px_overlapping": 197
+   },
+   "4343": {
+    "px": 99,
+    "best_iou": 0.2427,
+    "matched": false,
+    "overlap_share": 0.3838,
+    "det_px_overlapping": 38
+   },
+   "4344": {
+    "px": 372,
+    "best_iou": 0.0654,
+    "matched": false,
+    "overlap_share": 0.879,
+    "det_px_overlapping": 327
+   }
+  }
+ },
+ "iou_object_threshold": 0.5
+}

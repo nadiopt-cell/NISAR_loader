@@ -1,0 +1,66 @@
+{
+  "method": "DiD coherence (gamma_control - gamma_storm)",
+  "storm_granule": "NISAR_L2_PR_GUNW_024_099_A_030_025_2000_SH_20260703T012709_20260703T012745_20260715T012709_20260715T012744_P05023_N_F_J_001.h5",
+  "control_granule": "NISAR_L2_PR_GUNW_025_099_A_030_026_2000_SH_20260715T012709_20260715T012744_20260727T012708_20260727T012743_P05023_N_F_J_001.h5",
+  "storm_pair": [
+    "2026-07-03T01:27:09",
+    "2026-07-15T01:27:09"
+  ],
+  "control_pair": [
+    "2026-07-15T01:27:09",
+    "2026-07-27T01:27:08"
+  ],
+  "event_date": "2026-07-05T00:00:00",
+  "layer": "HH_coherenceMagnitude_80m",
+  "polarization": "HH",
+  "grid": {
+    "width": 4716,
+    "height": 4698,
+    "crs": "EPSG:32638",
+    "pixel_size_m": 80.0
+  },
+  "background": {
+    "n_pixels": 121666,
+    "median_dcoh": 0.10897747427225113,
+    "mad_dcoh": 0.08736158907413483
+  },
+  "threshold": {
+    "rule": "median(bg) + a_coh (absolute, reference plugin)",
+    "mode": "absolute",
+    "a_coh": 0.25,
+    "k": 0.25,
+    "value": 0.35897747427225113
+  },
+  "detection": {
+    "pixels": 1426,
+    "area_ha": 912.64,
+    "objects": 49,
+    "min_pixels_per_object": 6,
+    "median_filter": "3x3"
+  },
+  "flags": [],
+  "forest_fraction_of_reference": 0.993234100135318,
+  "metrics": {
+    "n_ref": 739,
+    "n_bg": 121666,
+    "excess": 0.13411247730255127,
+    "auc": 0.8066452897167153,
+    "tpr_fpr05": 0.2313937753721245
+  },
+  "warnings": [],
+  "params": {
+    "threshold_mode": "absolute",
+    "a_coh": 0.25,
+    "k_mad": 0.25,
+    "min_pixels": 6,
+    "median_size": 3,
+    "ring_radius_m": 10000.0,
+    "forest_fraction": 0.5,
+    "outside_forest_threshold": 0.3,
+    "pre_coh_flag": 0.6
+  },
+  "outputs": [
+    "/home/z/my-project/download/nisar_val_new/nnov_sukhona/dcoh.tif",
+    "/home/z/my-project/download/nisar_val_new/nnov_sukhona/windthrow_mask.tif"
+  ]
+}

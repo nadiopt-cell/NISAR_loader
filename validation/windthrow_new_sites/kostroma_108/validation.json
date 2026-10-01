@@ -1,0 +1,451 @@
+{
+ "site": "kostroma_108",
+ "label": "Костромская+Нижегородская 05.07.2026 (4267/4271/4268/4282/4283)",
+ "storm": "NISAR_L2_PR_GUNW_024_108_D_059_025_2000_SH_20260703T164247_20260703T164323_20260715T164246_20260715T164322_P05023_N_F_J_001.h5",
+ "control": "NISAR_L2_PR_GUNW_025_108_D_059_026_2000_SH_20260715T164246_20260715T164322_20260727T164245_20260727T164321_P05023_N_F_J_001.h5",
+ "storm_interval": [
+  "2026-07-03",
+  "2026-07-15"
+ ],
+ "control_interval": [
+  "2026-07-15",
+  "2026-07-27"
+ ],
+ "track": "108D",
+ "frame": 59,
+ "event_date": "2026-07-05",
+ "event_ids": [
+  4266,
+  4267,
+  4268,
+  4269,
+  4270,
+  4271,
+  4272,
+  4273,
+  4275,
+  4276,
+  4277,
+  4278,
+  4279,
+  4280,
+  4281,
+  4282,
+  4283,
+  4284,
+  4288,
+  4289,
+  4290,
+  4291
+ ],
+ "events": {
+  "4266": {
+   "type": "шквал",
+   "date": "2026-07-05",
+   "area_ha": 139.42498483,
+   "region": "Костромская область",
+   "n_poly": 1
+  },
+  "4267": {
+   "type": "смерч",
+   "date": "2026-07-05",
+   "area_ha": 97.7979517505,
+   "region": "Костромская область",
+   "n_poly": 1
+  },
+  "4268": {
+   "type": "смерч",
+   "date": "2026-07-05",
+   "area_ha": 68.7316706629,
+   "region": "Костромская область",
+   "n_poly": 1
+  },
+  "4269": {
+   "type": "смерч",
+   "date": "2026-07-05",
+   "area_ha": 179.656558639,
+   "region": "Костромская область",
+   "n_poly": 1
+  },
+  "4270": {
+   "type": "смерч",
+   "date": "2026-07-05",
+   "area_ha": 19.1420318368,
+   "region": "Костромская область",
+   "n_poly": 1
+  },
+  "4271": {
+   "type": "шквал",
+   "date": "2026-07-05",
+   "area_ha": 88.5748825872,
+   "region": "Костромская область",
+   "n_poly": 1
+  },
+  "4272": {
+   "type": "смерч",
+   "date": "2026-07-05",
+   "area_ha": 14.5406890548,
+   "region": "Костромская область",
+   "n_poly": 1
+  },
+  "4273": {
+   "type": "смерч",
+   "date": "2026-07-05",
+   "area_ha": 21.3723863803,
+   "region": "Костромская область",
+   "n_poly": 1
+  },
+  "4275": {
+   "type": "шквал",
+   "date": "2026-07-05",
+   "area_ha": 373.022708271,
+   "region": "Нижегородская область",
+   "n_poly": 1
+  },
+  "4276": {
+   "type": "шквал",
+   "date": "2026-07-05",
+   "area_ha": 31.3077784623,
+   "region": "Нижегородская область",
+   "n_poly": 1
+  },
+  "4277": {
+   "type": "смерч",
+   "date": "2026-07-05",
+   "area_ha": 9.15455351301,
+   "region": "Костромская область",
+   "n_poly": 1
+  },
+  "4278": {
+   "type": "шквал",
+   "date": "2026-07-05",
+   "area_ha": 32.1565995926,
+   "region": "Костромская область",
+   "n_poly": 1
+  },
+  "4279": {
+   "type": "шквал",
+   "date": "2026-07-05",
+   "area_ha": 164.007599947,
+   "region": "Нижегородская область",
+   "n_poly": 1
+  },
+  "4280": {
+   "type": "смерч",
+   "date": "2026-07-05",
+   "area_ha": 5.57367737692,
+   "region": "Нижегородская область",
+   "n_poly": 1
+  },
+  "4281": {
+   "type": "смерч",
+   "date": "2026-07-05",
+   "area_ha": 7.59373066381,
+   "region": "Нижегородская область",
+   "n_poly": 1
+  },
+  "4282": {
+   "type": "шквал",
+   "date": "2026-07-05",
+   "area_ha": 78.6451150011,
+   "region": "Нижегородская область",
+   "n_poly": 1
+  },
+  "4283": {
+   "type": "шквал",
+   "date": "2026-07-05",
+   "area_ha": 49.3584214682,
+   "region": "Нижегородская область",
+   "n_poly": 1
+  },
+  "4284": {
+   "type": "смерч",
+   "date": "2026-07-05",
+   "area_ha": 16.7249390935,
+   "region": "Вологодская область",
+   "n_poly": 1
+  },
+  "4288": {
+   "type": "смерч",
+   "date": "2026-07-05",
+   "area_ha": 24.6668025791,
+   "region": "Костромская область",
+   "n_poly": 1
+  },
+  "4289": {
+   "type": "смерч",
+   "date": "2026-07-05",
+   "area_ha": 9.45180370391,
+   "region": "Костромская область",
+   "n_poly": 1
+  },
+  "4290": {
+   "type": "смерч",
+   "date": "2026-07-05",
+   "area_ha": 11.1184023751,
+   "region": "Костромская область",
+   "n_poly": 1
+  },
+  "4291": {
+   "type": "смерч",
+   "date": "2026-07-05",
+   "area_ha": 12.2420544918,
+   "region": "Костромская область",
+   "n_poly": 1
+  }
+ },
+ "parasitic_events_in_control": [],
+ "forest_mask_used": true,
+ "forest_warnings": [],
+ "plugin_report": {
+  "method": "DiD coherence (gamma_control - gamma_storm)",
+  "storm_granule": "NISAR_L2_PR_GUNW_024_108_D_059_025_2000_SH_20260703T164247_20260703T164323_20260715T164246_20260715T164322_P05023_N_F_J_001.h5",
+  "control_granule": "NISAR_L2_PR_GUNW_025_108_D_059_026_2000_SH_20260715T164246_20260715T164322_20260727T164245_20260727T164321_P05023_N_F_J_001.h5",
+  "storm_pair": [
+   "2026-07-03T16:42:47",
+   "2026-07-15T16:42:46"
+  ],
+  "control_pair": [
+   "2026-07-15T16:42:46",
+   "2026-07-27T16:42:45"
+  ],
+  "event_date": "2026-07-05T00:00:00",
+  "layer": "HH_coherenceMagnitude_80m",
+  "polarization": "HH",
+  "grid": {
+   "width": 4761,
+   "height": 4752,
+   "crs": "EPSG:32638",
+   "pixel_size_m": 80.0
+  },
+  "background": {
+   "n_pixels": 855401,
+   "median_dcoh": 0.09008172154426575,
+   "mad_dcoh": 0.1263449341058731
+  },
+  "threshold": {
+   "rule": "median(bg) + a_coh (absolute, reference plugin)",
+   "mode": "absolute",
+   "a_coh": 0.25,
+   "k": 0.25,
+   "value": 0.34008172154426575
+  },
+  "detection": {
+   "pixels": 180139,
+   "area_ha": 115288.96,
+   "objects": 2671,
+   "min_pixels_per_object": 6,
+   "median_filter": "3x3"
+  },
+  "flags": [],
+  "forest_fraction_of_reference": 0.9834050399508297,
+  "metrics": {
+   "n_ref": 1627,
+   "n_bg": 855401,
+   "excess": 0.28405603766441345,
+   "auc": 0.9196885943917351,
+   "tpr_fpr05": 0.6324523663183774
+  },
+  "warnings": [],
+  "params": {
+   "threshold_mode": "absolute",
+   "a_coh": 0.25,
+   "k_mad": 0.25,
+   "min_pixels": 6,
+   "median_size": 3,
+   "ring_radius_m": 10000.0,
+   "forest_fraction": 0.5,
+   "outside_forest_threshold": 0.3,
+   "pre_coh_flag": 0.6
+  },
+  "outputs": [
+   "/home/z/my-project/download/nisar_val_new/kostroma_108/dcoh.tif",
+   "/home/z/my-project/download/nisar_val_new/kostroma_108/windthrow_mask.tif",
+   "/home/z/my-project/download/nisar_val_new/kostroma_108/windthrow_report.json"
+  ]
+ },
+ "pixel_metrics": {
+  "tp": 648,
+  "fp": 173968,
+  "fn": 952,
+  "precision": 0.0037,
+  "recall": 0.405,
+  "f1": 0.0074,
+  "iou": 0.0037
+ },
+ "pixel_metrics_local_3km": {
+  "tp": 652,
+  "fp": 6247,
+  "fn": 975,
+  "precision": 0.0945,
+  "recall": 0.4007,
+  "f1": 0.1529,
+  "iou": 0.0828
+ },
+ "object_metrics": {
+  "n_det_objects": 2671,
+  "n_ref_events": 22,
+  "events_matched": 1,
+  "det_objects_matched": 1,
+  "precision": 0.0004,
+  "recall": 0.0455,
+  "f1": 0.0007,
+  "per_event": {
+   "4266": {
+    "px": 223,
+    "best_iou": 0.1264,
+    "matched": false,
+    "overlap_share": 0.6771,
+    "det_px_overlapping": 151
+   },
+   "4267": {
+    "px": 146,
+    "best_iou": 0.1582,
+    "matched": false,
+    "overlap_share": 0.5137,
+    "det_px_overlapping": 75
+   },
+   "4268": {
+    "px": 106,
+    "best_iou": 0.1081,
+    "matched": false,
+    "overlap_share": 0.5189,
+    "det_px_overlapping": 55
+   },
+   "4269": {
+    "px": 286,
+    "best_iou": 0.1027,
+    "matched": false,
+    "overlap_share": 0.5979,
+    "det_px_overlapping": 171
+   },
+   "4270": {
+    "px": 32,
+    "best_iou": 0.0,
+    "matched": false,
+    "overlap_share": 0.0,
+    "det_px_overlapping": 0
+   },
+   "4271": {
+    "px": 129,
+    "best_iou": 0.092,
+    "matched": false,
+    "overlap_share": 0.5271,
+    "det_px_overlapping": 68
+   },
+   "4272": {
+    "px": 24,
+    "best_iou": 0.5588,
+    "matched": true,
+    "overlap_share": 0.7917,
+    "det_px_overlapping": 19
+   },
+   "4273": {
+    "px": 35,
+    "best_iou": 0.1923,
+    "matched": false,
+    "overlap_share": 0.5143,
+    "det_px_overlapping": 18
+   },
+   "4275": {
+    "px": 579,
+    "best_iou": 0.0,
+    "matched": false,
+    "overlap_share": 0.0,
+    "det_px_overlapping": 0
+   },
+   "4276": {
+    "px": 45,
+    "best_iou": 0.0,
+    "matched": false,
+    "overlap_share": 0.0,
+    "det_px_overlapping": 0
+   },
+   "4277": {
+    "px": 12,
+    "best_iou": 0.0,
+    "matched": false,
+    "overlap_share": 0.0,
+    "det_px_overlapping": 0
+   },
+   "4278": {
+    "px": 54,
+    "best_iou": 0.0,
+    "matched": false,
+    "overlap_share": 0.0,
+    "det_px_overlapping": 0
+   },
+   "4279": {
+    "px": 267,
+    "best_iou": 0.0262,
+    "matched": false,
+    "overlap_share": 0.0262,
+    "det_px_overlapping": 7
+   },
+   "4280": {
+    "px": 10,
+    "best_iou": 0.0,
+    "matched": false,
+    "overlap_share": 0.0,
+    "det_px_overlapping": 0
+   },
+   "4281": {
+    "px": 12,
+    "best_iou": 0.0,
+    "matched": false,
+    "overlap_share": 0.0,
+    "det_px_overlapping": 0
+   },
+   "4282": {
+    "px": 127,
+    "best_iou": 0.2109,
+    "matched": false,
+    "overlap_share": 0.315,
+    "det_px_overlapping": 40
+   },
+   "4283": {
+    "px": 77,
+    "best_iou": 0.1,
+    "matched": false,
+    "overlap_share": 0.4935,
+    "det_px_overlapping": 38
+   },
+   "4284": {
+    "px": 30,
+    "best_iou": 0.0,
+    "matched": false,
+    "overlap_share": 0.0,
+    "det_px_overlapping": 0
+   },
+   "4288": {
+    "px": 40,
+    "best_iou": 0.0,
+    "matched": false,
+    "overlap_share": 0.0,
+    "det_px_overlapping": 0
+   },
+   "4289": {
+    "px": 10,
+    "best_iou": 0.0,
+    "matched": false,
+    "overlap_share": 0.0,
+    "det_px_overlapping": 0
+   },
+   "4290": {
+    "px": 17,
+    "best_iou": 0.0,
+    "matched": false,
+    "overlap_share": 0.0,
+    "det_px_overlapping": 0
+   },
+   "4291": {
+    "px": 20,
+    "best_iou": 0.4,
+    "matched": false,
+    "overlap_share": 0.5,
+    "det_px_overlapping": 10
+   }
+  }
+ },
+ "iou_object_threshold": 0.5
+}

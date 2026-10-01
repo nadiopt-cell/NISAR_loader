@@ -1,7 +1,7 @@
 [general]
 name=NISAR Vegetation
 description=Search, preview, download and process NASA NISAR L-band SAR products (GCOV + GUNW): vegetation indices (HV dB, RVI, cross-ratio), windthrow detection (DiD coherence), export to GeoTIFF/COG
-version=0.3.1
+version=0.3.2
 qgisMinimumVersion=3.28
 author=nadiopt-cell
 email=nadiopt-cell@users.noreply.github.com

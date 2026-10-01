@@ -1,0 +1,213 @@
+{
+ "site": "karpinsk_retest",
+ "label": "РЕТЕСТ скрипта: Карпинск 22.06.2026 (4251: 12 га), ожидания из прошлой валидации",
+ "storm": "/home/z/my-project/upload/gunw/NISAR_L2_PR_GUNW_023_093_D_058_024_2000_SH_20260620T154356_20260620T154433_20260702T154356_20260702T154432_P05023_N_F_J_001.h5",
+ "control": "/home/z/my-project/upload/gunw/NISAR_L2_PR_GUNW_024_093_D_058_025_2000_SH_20260702T154356_20260702T154432_20260714T154355_20260714T154431_P05023_F_F_J_001.h5",
+ "storm_interval": [
+  "2026-06-20",
+  "2026-07-02"
+ ],
+ "control_interval": [
+  "2026-07-02",
+  "2026-07-14"
+ ],
+ "track": "93D",
+ "frame": 58,
+ "event_date": "2026-06-22",
+ "event_ids": [
+  4251,
+  4252,
+  4253,
+  4254,
+  4255,
+  4256
+ ],
+ "events": {
+  "4251": {
+   "type": "смерч",
+   "date": "2026-06-22",
+   "area_ha": 12.0436424094,
+   "region": "Свердловская область",
+   "n_poly": 1
+  },
+  "4252": {
+   "type": "смерч",
+   "date": "2026-06-22",
+   "area_ha": 168.363195736,
+   "region": "Свердловская область",
+   "n_poly": 1
+  },
+  "4253": {
+   "type": "смерч",
+   "date": "2026-06-22",
+   "area_ha": 54.2309880313,
+   "region": "Свердловская область",
+   "n_poly": 1
+  },
+  "4254": {
+   "type": "смерч",
+   "date": "2026-06-22",
+   "area_ha": 23.1385277294,
+   "region": "Свердловская область",
+   "n_poly": 1
+  },
+  "4255": {
+   "type": "смерч",
+   "date": "2026-06-22",
+   "area_ha": 415.164045556,
+   "region": "Свердловская область",
+   "n_poly": 1
+  },
+  "4256": {
+   "type": "смерч",
+   "date": "2026-06-22",
+   "area_ha": 840.377969314,
+   "region": "Свердловская область",
+   "n_poly": 1
+  }
+ },
+ "parasitic_events_in_control": [
+  4263
+ ],
+ "forest_mask_used": true,
+ "forest_warnings": [],
+ "plugin_report": {
+  "method": "DiD coherence (gamma_control - gamma_storm)",
+  "storm_granule": "NISAR_L2_PR_GUNW_023_093_D_058_024_2000_SH_20260620T154356_20260620T154433_20260702T154356_20260702T154432_P05023_N_F_J_001.h5",
+  "control_granule": "NISAR_L2_PR_GUNW_024_093_D_058_025_2000_SH_20260702T154356_20260702T154432_20260714T154355_20260714T154431_P05023_F_F_J_001.h5",
+  "storm_pair": [
+   "2026-06-20T15:43:56",
+   "2026-07-02T15:43:56"
+  ],
+  "control_pair": [
+   "2026-07-02T15:43:56",
+   "2026-07-14T15:43:55"
+  ],
+  "event_date": "2026-06-22T00:00:00",
+  "layer": "HH_coherenceMagnitude_80m",
+  "polarization": "HH",
+  "grid": {
+   "width": 4446,
+   "height": 4446,
+   "crs": "EPSG:3413",
+   "pixel_size_m": 80.0
+  },
+  "background": {
+   "n_pixels": 45865,
+   "median_dcoh": 0.07540446519851685,
+   "mad_dcoh": 0.07692829519510269
+  },
+  "threshold": {
+   "rule": "median(bg) + a_coh (absolute, reference plugin)",
+   "mode": "absolute",
+   "a_coh": 0.25,
+   "k": 0.25,
+   "value": 0.32540446519851685
+  },
+  "detection": {
+   "pixels": 480109,
+   "area_ha": 307269.76,
+   "objects": 3459,
+   "min_pixels_per_object": 6,
+   "median_filter": "3x3"
+  },
+  "flags": [],
+  "forest_fraction_of_reference": 0.95,
+  "metrics": {
+   "n_ref": 20,
+   "n_bg": 45865,
+   "excess": 0.31757035851478577,
+   "auc": 0.9844718194701843,
+   "tpr_fpr05": 0.9
+  },
+  "warnings": [],
+  "params": {
+   "threshold_mode": "absolute",
+   "a_coh": 0.25,
+   "k_mad": 0.25,
+   "min_pixels": 6,
+   "median_size": 3,
+   "ring_radius_m": 10000.0,
+   "forest_fraction": 0.5,
+   "outside_forest_threshold": 0.3,
+   "pre_coh_flag": 0.6
+  },
+  "outputs": [
+   "/home/z/my-project/download/nisar_val_new/karpinsk_retest/dcoh.tif",
+   "/home/z/my-project/download/nisar_val_new/karpinsk_retest/windthrow_mask.tif",
+   "/home/z/my-project/download/nisar_val_new/karpinsk_retest/windthrow_report.json"
+  ]
+ },
+ "pixel_metrics": {
+  "tp": 14,
+  "fp": 474369,
+  "fn": 5,
+  "precision": 0.0,
+  "recall": 0.7368,
+  "f1": 0.0001,
+  "iou": 0.0
+ },
+ "pixel_metrics_local_3km": {
+  "tp": 15,
+  "fp": 63,
+  "fn": 5,
+  "precision": 0.1923,
+  "recall": 0.75,
+  "f1": 0.3061,
+  "iou": 0.1807
+ },
+ "object_metrics": {
+  "n_det_objects": 3459,
+  "n_ref_events": 6,
+  "events_matched": 0,
+  "det_objects_matched": 0,
+  "precision": 0.0,
+  "recall": 0.0,
+  "f1": 0.0,
+  "per_event": {
+   "4251": {
+    "px": 20,
+    "best_iou": 0.1556,
+    "matched": false,
+    "overlap_share": 0.75,
+    "det_px_overlapping": 15
+   },
+   "4252": {
+    "px": 287,
+    "best_iou": 0.0,
+    "matched": false,
+    "overlap_share": 0.0,
+    "det_px_overlapping": 0
+   },
+   "4253": {
+    "px": 0,
+    "best_iou": 0.0,
+    "matched": false,
+    "overlap_share": 0.0,
+    "det_px_overlapping": 0
+   },
+   "4254": {
+    "px": 8,
+    "best_iou": 0.0,
+    "matched": false,
+    "overlap_share": 0.0,
+    "det_px_overlapping": 0
+   },
+   "4255": {
+    "px": 0,
+    "best_iou": 0.0,
+    "matched": false,
+    "overlap_share": 0.0,
+    "det_px_overlapping": 0
+   },
+   "4256": {
+    "px": 1074,
+    "best_iou": 0.0,
+    "matched": false,
+    "overlap_share": 0.0,
+    "det_px_overlapping": 0
+   }
+  }
+ },
+ "iou_object_threshold": 0.5
+}

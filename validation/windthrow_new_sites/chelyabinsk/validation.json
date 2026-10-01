@@ -1,0 +1,153 @@
+{
+ "site": "chelyabinsk",
+ "label": "Челябинская шквал 21.06.2026 (4265: 157 га)",
+ "storm": "NISAR_L2_PR_GUNW_023_084_A_030_025_2000_SH_20260620T002854_20260620T002912_20260714T002853_20260714T002910_P05023_F_P_J_001.h5",
+ "control": "NISAR_L2_PR_GUNW_026_084_A_030_028_2000_SH_20260726T002852_20260726T002910_20260819T002851_20260819T002909_P05023_N_P_J_001.h5",
+ "storm_interval": [
+  "2026-06-20",
+  "2026-07-14"
+ ],
+ "control_interval": [
+  "2026-07-26",
+  "2026-08-19"
+ ],
+ "track": "84A",
+ "frame": 30,
+ "event_date": "2026-06-21",
+ "event_ids": [
+  4265,
+  4293
+ ],
+ "events": {
+  "4265": {
+   "type": "шквал",
+   "date": "2026-06-21",
+   "area_ha": 157.207178606,
+   "region": "Челябинская область",
+   "n_poly": 1
+  },
+  "4293": {
+   "type": "смерч",
+   "date": "2026-06-21",
+   "area_ha": 5.80129000486,
+   "region": "Башкортостан",
+   "n_poly": 1
+  }
+ },
+ "parasitic_events_in_control": [
+  4322
+ ],
+ "forest_mask_used": true,
+ "forest_warnings": [],
+ "plugin_report": {
+  "method": "DiD coherence (gamma_control - gamma_storm)",
+  "storm_granule": "NISAR_L2_PR_GUNW_023_084_A_030_025_2000_SH_20260620T002854_20260620T002912_20260714T002853_20260714T002910_P05023_F_P_J_001.h5",
+  "control_granule": "NISAR_L2_PR_GUNW_026_084_A_030_028_2000_SH_20260726T002852_20260726T002910_20260819T002851_20260819T002909_P05023_N_P_J_001.h5",
+  "storm_pair": [
+   "2026-06-20T00:28:54",
+   "2026-07-14T00:28:53"
+  ],
+  "control_pair": [
+   "2026-07-26T00:28:52",
+   "2026-08-19T00:28:51"
+  ],
+  "event_date": "2026-06-21T00:00:00",
+  "layer": "HH_coherenceMagnitude_80m",
+  "polarization": "HH",
+  "grid": {
+   "width": 4644,
+   "height": 4617,
+   "crs": "EPSG:32641",
+   "pixel_size_m": 80.0
+  },
+  "background": {
+   "n_pixels": 28459,
+   "median_dcoh": 0.17426371574401855,
+   "mad_dcoh": 0.11727175861597061
+  },
+  "threshold": {
+   "rule": "median(bg) + a_coh (absolute, reference plugin)",
+   "mode": "absolute",
+   "a_coh": 0.25,
+   "k": 0.25,
+   "value": 0.42426371574401855
+  },
+  "detection": {
+   "pixels": 199526,
+   "area_ha": 127696.64,
+   "objects": 1633,
+   "min_pixels_per_object": 6,
+   "median_filter": "3x3"
+  },
+  "flags": [],
+  "forest_fraction_of_reference": 1.0,
+  "metrics": {
+   "n_ref": 253,
+   "n_bg": 28459,
+   "excess": 0.16190773248672485,
+   "auc": 0.8254236348886623,
+   "tpr_fpr05": 0.20948616600790515
+  },
+  "warnings": [],
+  "params": {
+   "threshold_mode": "absolute",
+   "a_coh": 0.25,
+   "k_mad": 0.25,
+   "min_pixels": 6,
+   "median_size": 3,
+   "ring_radius_m": 10000.0,
+   "forest_fraction": 0.5,
+   "outside_forest_threshold": 0.3,
+   "pre_coh_flag": 0.6
+  },
+  "outputs": [
+   "/home/z/my-project/download/nisar_val_new/chelyabinsk/dcoh.tif",
+   "/home/z/my-project/download/nisar_val_new/chelyabinsk/windthrow_mask.tif",
+   "/home/z/my-project/download/nisar_val_new/chelyabinsk/windthrow_report.json"
+  ]
+ },
+ "pixel_metrics": {
+  "tp": 10,
+  "fp": 197169,
+  "fn": 243,
+  "precision": 0.0001,
+  "recall": 0.0395,
+  "f1": 0.0001,
+  "iou": 0.0001
+ },
+ "pixel_metrics_local_3km": {
+  "tp": 10,
+  "fp": 91,
+  "fn": 243,
+  "precision": 0.099,
+  "recall": 0.0395,
+  "f1": 0.0565,
+  "iou": 0.0291
+ },
+ "object_metrics": {
+  "n_det_objects": 1633,
+  "n_ref_events": 2,
+  "events_matched": 0,
+  "det_objects_matched": 0,
+  "precision": 0.0,
+  "recall": 0.0,
+  "f1": 0.0,
+  "per_event": {
+   "4265": {
+    "px": 253,
+    "best_iou": 0.0237,
+    "matched": false,
+    "overlap_share": 0.0395,
+    "det_px_overlapping": 10
+   },
+   "4293": {
+    "px": 10,
+    "best_iou": 0.0,
+    "matched": false,
+    "overlap_share": 0.0,
+    "det_px_overlapping": 0
+   }
+  }
+ },
+ "iou_object_threshold": 0.5
+}
