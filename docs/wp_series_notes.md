@@ -148,3 +148,37 @@ First `ci` runs on the WP series (cdb9c30 / merge 2d8c686) failed:
 3. `version` job: `No module named pytest` - the job ran the version
    consistency test without installing anything. Fix: install step
    with pytest added.
+
+## Integration run, QGIS 3.44.11 (17.10.2026, post v0.4.0)
+
+Headless acceptance on the merged main (with synthetic GCOV/GUNW
+products): all 5 nisar:* algorithms ran via qgis_process;
+CRS/dtype/units verified with rasterio; GUI smoke + API probes done
+inside the running QGIS python. Full record:
+`tests/qgis/README.md`.
+
+[ПРОВЕРИТЬ] closed on this run:
+- `QgsVectorFileWriter.create()` with the Qt5/Qt6 chain - works
+  (Qt 5.15.13 -> QMetaType.Int; Qt6/QGIS 4.x still untested).
+- `QgsSettings proxy/*` key names - round-trip ok in the installed
+  QGIS (they are the native QGIS options keys).
+- `bbox_wgs84_from_georef` OSR branch - matches pyproj 3.7.1 oracle
+  to 7 decimals.
+- Two-frequency (frequencyB/UR clone) export - correct EPSG:32605
+  after fixing a malformed WKT in the synthetic fixture (real
+  granules never hit this - their WKT carries the authority inside
+  the UNIT element).
+
+[ПРОВЕРИТЬ] still open:
+- IDR driver NISAR in OSGeo4W GDAL 3.13.0: `GetDriverByName("NISAR")`
+  is None - A1 backend unavailable there; across-the-board A2 opens
+  the products but cannot georeference them (as expected); auto
+  falls back to A3 (h5py). Local QGIS must get h5py via the
+  PYTHONPATH wheel trick (tests/qgis/README.md) to have a working
+  reader at all.
+- QgsAuthManager -> EDL wiring (authcfg card in the dialog) remains
+  unimplemented by design (WP-3 token comes from config/env); token
+  persistence in settings verified ABSENT.
+- GUI runtime paths (download queue, retry menu, disk-space bar) are
+  construct-only here; live acceptance still needs a real download
+  session with EDL credentials.

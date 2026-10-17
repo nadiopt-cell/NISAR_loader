@@ -72,3 +72,75 @@ Minimum manual acceptance (TZ §2, MVP):
    detection, metrics) appears in the panel. Cross-check in the Toolbox:
    `nisar:windthrow_did` with the same inputs.
 9. No tracebacks anywhere; BETA scenes produce a warning.
+
+## Executed headless acceptance (2026-10-17, QGIS 3.44.11 OSGeo4W, plugin v0.4.0)
+
+Environment on this machine: OSGeo4W QGIS 3.44.11 (Qt 5.15.13, Python
+3.12.13, GDAL 3.13.0, PROJ 9.8.1), `QT_QPA_PLATFORM=offscreen`,
+fresh profile in `QGIS_CUSTOM_CONFIG_PATH`, plugin deployed from
+`nisar_qgis_plugin_v0.4.0.zip`, enabled via
+`qgis_process plugins enable nisar_qgis` (5 algorithms listed).
+
+Inputs: synthetic products from `conftest.py` factories
+(`make_synthetic_gcov`, `make_synthetic_gunw`, the urgent-response
+frequencyB clone) - no real granules present on disk at run time.
+
+Results (verified independently with rasterio 1.x on a separate
+Python):
+
+- `nisar:hv_db`, `nisar:rvi`, `nisar:cross_ratio` on the dual-pol
+  synthetic GCOV -> Float32 GeoTIFF 48x32, EPSG:32633,
+  transform (399995.0, 10, 0, 5000005.0, 0, -10), HV dB in
+  [-24.0..-1.16], RVI [0.66..1.35], cross-ratio [~-7.01..-2.92] dB;
+  No .aux.xml appeared next to the sources (GDAL_PAM honored).
+- `nisar:export` on the frequencyB urgent-response clone (VHVH,
+  two-frequency item) -> Float32 GeoTIFF, **EPSG:32605** after a fix
+  of the synthetic fixture WKT (see below).
+- `nisar:windthrow_did` on the synthetic GUNW pair -> dcoh + mask
+  (EPSG:32641, 48x64, 80 m), detection 140 px / 1 object with the
+  absolute threshold, honest warnings present, report JSON written.
+  `storm_pair`/`control_pair` are null by design for synthetic files:
+  pair stamps are parsed from the real granule FILE NAME.
+- GUI smoke: `NisarMainDialog` builds offscreen, 7 tabs
+  (Search / Download / Open / Processing / Windthrow (DiD) / Export /
+  Settings), `_push_message_bar` delivers Critical + Warning items
+  into a real `QgsMessageBar` (WP-4).
+- API checks live in this QGIS:
+  - `QgsVectorFileWriter.create(...)` with the plugin's Qt5/Qt6 chain
+    (Qt 5.15 -> `QMetaType.Int` == 2) creates a GPKG writer,
+    hasError == 0 (WP-5/F13);
+  - `QgsSettings` keys `proxy/proxyEnabled|proxyHost|proxyPort|
+    proxyType` round-trip correctly (WP-3 `_apply_qgis_proxies`);
+  - `geo.bbox_wgs84_from_georef` OSR branch (EPSG:32633 synthetic)
+    matches a pyproj 3.7.1 oracle to 7 decimals (WP-5);
+  - EDL token set through `ConfigManager` is NOT persisted in
+    `QgsSettings` (secrets rule).
+- Not exercised here: real-granule acceptance, download/search against
+  ASF (needs EDL), STRICT_FOREST live path with reference polygons
+  (unit-covered), conda-forge QGIS with a compiled NISAR driver
+  (`GetDriverByName("NISAR") is None` in OSGeo4W GDAL 3.13.0 - the
+  A1 backend is unavailable there; A2 opens via `NETCDF:` but cannot
+  georeference the products; the auto-selection falls back to A3,
+  which needs h5py).
+
+### h5py inside the QGIS python (no-install workaround)
+
+OSGeo4W python has no h5py, and installing h5py 3.12+ into it breaks
+(`ppocedure-not-found` DLL conflict): GDAL loads the OSGeo HDF5
+1.14.6 first, and recent h5py wheels bundle HDF5 2.x. Workaround
+verified here: unpack the wheel `h5py-3.11.0-cp312-cp312-win_amd64`
+(a version built against HDF5 1.14.2) into any folder and append it
+to `PYTHONPATH` AFTER `o4w_env.bat` sets its own value
+(a wrapper .bat that re-exports PYTHONPATH makes qgis_process and the
+python-eos use A3 transparently). Single warning
+"running against HDF5 1.14.6 (built against 1.14.2)" is benign.
+
+### Synthetic-fixture WKT bug found and fixed
+
+The urgent-response fixture WKT placed `AUTHORITY["EPSG","9001"]`
+(``UNIT``) OUTSIDE the UNIT brackets, at the PROJCS level, which makes
+GDAL 3.13 mis-identify the whole CRS as EPSG:9001 (IGS97 geocentric!)
+when the WKT is written to GeoTIFF. Real granules were never affected
+(their WKT is well-formed); the dual-polarization synthetic fixture
+always was. `conftest.py` is fixed; frequencyB exports now carry
+EPSG:32605 end-to-end.

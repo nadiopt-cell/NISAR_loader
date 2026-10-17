@@ -258,8 +258,9 @@ def gcov_ur_vdual(tmp_path_factory):
             'PARAMETER["central_meridian",-153],'
             'PARAMETER["scale_factor",0.9996],'
             'PARAMETER["false_easting",500000],'
-            'PARAMETER["false_northing",0],UNIT["metre",1],'
-            'AUTHORITY["EPSG","9001"]],AUTHORITY["EPSG","32605"]]')
+            'PARAMETER["false_northing",0],'
+            'UNIT["metre",1,AUTHORITY["EPSG","9001"]],'
+            'AUTHORITY["EPSG","32605"]]')
 
         grid.create_dataset("listOfPolarizations",
                             data=np.array(["VH", "VV"], dtype="S2"))
