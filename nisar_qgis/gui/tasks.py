@@ -49,6 +49,11 @@ class NisarSearchTask(QgsTask):
             scenes = backend.search(self.params)
             if self.isCanceled():
                 return False
+            # WP-4/F8: partial backend failures and truncation notes are
+            # carried next to the scenes; the GUI shows them in the
+            # message bar instead of dropping them silently.
+            self.search_warnings = list(getattr(
+                backend, "search_warnings", None) or [])
             self._scenes = scenes
             self.setProgress(100)
             return True
@@ -59,7 +64,10 @@ class NisarSearchTask(QgsTask):
 
     def finished(self, success):
         if success:
-            self.signals.finished_ok.emit(self._scenes)
+            # payload = (scenes, warnings) since WP-4
+            self.signals.finished_ok.emit(
+                (self._scenes, list(getattr(self, "search_warnings", None)
+                                    or [])))
         else:
             msg = getattr(self, "_error", "Search failed")
             QgsMessageLog.logMessage("NISAR search failed: %s" % msg,

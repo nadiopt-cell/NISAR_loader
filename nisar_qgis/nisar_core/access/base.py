@@ -13,6 +13,15 @@ from ..models import SceneRecord, SearchParameters
 logger = logging.getLogger("nisar.access")
 
 
+class SearchError(RuntimeError):
+    """A search backend failed (WP-4, finding F8).
+
+    Search must never fail silently: a total failure raises this error
+    with the explanatory text; partial (per-product-type) failures are
+    collected in ``backend.search_warnings`` for the GUI to display.
+    """
+
+
 @dataclass
 class DownloadProgress:
     """Progress info for downloads."""

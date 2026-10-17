@@ -73,3 +73,27 @@
 - Состояние: 187 passed, 1 skipped; ruff F чисто. В юнит-окружении GDAL
   и pyproj отсутствуют - аналитический UTM-обратник проверен против
   pyproj-якорей NUMBER-ов в тестах; OSR/pyproj ветки работают в QGIS.
+
+## WP-4 - поиск ASF без тихих отказов
+- `SearchError(RuntimeError)` в `nisar_core/access/base.py`; `search()` B2:
+  полный провал (нет результатов и все типы упали) -> SearchError с
+  собранным текстом; PARTIAL по типам продукта - в `backend.search_warnings`
+  (GUI показывает в message bar); парс-упавшая запись тоже предупреждение.
+- Полный провал-asf_search недоступен - тоже SearchError (бывш. RuntimeError).
+- Лимит: `params.max_results` (GUI теперь берёт `search_max_results` из
+  конфига, иначе 100); при получении РОВНО лимита по типу - предупреждение
+  «truncated at the configured limit» (ASF может обрезать на границе).
+- Окно времени: `asf_time_bounds()` - все времена tz-aware UTC;
+  конечная дата включительно (23:59:59 UTC последнего дня).
+- `acquisition_time`: нет в метаданных -> None + предупреждение;
+  `datetime.now()` больше НЕ подставляется.
+- Футпринт MultiPolygon разбирается целиком (WKT MULTIPOLYGON обеих
+  частей); `preview.bbox_from_wkt` понимает MULTIPOLYGON (union bbox
+  повсеместным частям).
+- GUI: NisarSearchTask эмитит (scenes, warnings); `_on_search_done`
+  распаковывает и показывает предупреждения в message bar; ошибки поиска
+  теперь в message bar (`_push_message_bar`, Qgis.Warning/Critical).
+- Приёмка: 9 тестов на моках asf_search (tests/unit/test_asf_search_wp4.py):
+  исключение -> SearchError; ровно лимит -> ходе; сцена в последний день
+  найдена (end=23:59:59Z); MultiPolygon парсится. Suite: 196 passed,
+  1 skipped; ruff F чисто.

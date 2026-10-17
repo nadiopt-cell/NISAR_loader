@@ -854,9 +854,31 @@ class NisarMainDialog(QDialog):
         from qgis.core import QgsApplication
         QgsApplication.taskManager().addTask(task)
 
-    def _on_search_done(self, scenes):
+    def _push_message_bar(self, message, warning=False):
+        """Show a message in the QGIS message bar (WP-4/F8)."""
+        level = None
+        try:
+            from qgis.core import Qgis
+            level = Qgis.Warning if warning else Qgis.Critical
+        except Exception:
+            level = None
+        try:
+            bar = self.iface.messageBar()
+            if level is None:
+                bar.pushMessage("NISAR", message)
+            else:
+                bar.pushMessage("NISAR", message, level=level)
+        except Exception:
+            pass
+
+    def _on_search_done(self, payload):
         self.search_btn.setEnabled(True)
         self.search_btn.setText(tr("ui.search.button"))
+        # WP-4: payload = (scenes, warnings) from NisarSearchTask
+        scenes, search_warnings = (payload if isinstance(payload, tuple)
+                                   else (payload, []))
+        for warning in search_warnings or []:
+            self._push_message_bar(str(warning), warning=True)
         self._scenes = list(scenes or [])
         self._clear_preview()
 
@@ -906,7 +928,8 @@ class NisarMainDialog(QDialog):
     def _on_search_error(self, message):
         self.search_btn.setEnabled(True)
         self.search_btn.setText(tr("ui.search.button"))
-        QMessageBox.critical(self, tr("ui.error"), message)
+        # WP-4: search errors surface in the message bar (not silently)
+        self._push_message_bar(str(message), warning=False)
 
     # ============================================================== Preview
     def _scene_for_row(self, row):
