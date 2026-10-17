@@ -120,7 +120,7 @@ class AccessRegistry:
         for backend in cls._backends:
             try:
                 avail, _reason = backend.check_availability()
-            except Exception as exc:  # pragma: no cover
+            except Exception:  # pragma: no cover
                 avail = False
             if avail:
                 available.append(backend)

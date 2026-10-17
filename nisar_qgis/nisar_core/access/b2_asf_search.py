@@ -12,7 +12,6 @@ Search API usage verified against the live ASF SearchAPI (2026-09-29):
 
 Authentication: ``~/.netrc`` (Earthdata Login) — no passwords here (TZ P0.6).
 """
-import json
 import logging
 from datetime import datetime
 from pathlib import Path

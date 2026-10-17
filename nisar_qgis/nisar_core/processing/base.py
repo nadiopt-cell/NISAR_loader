@@ -6,8 +6,7 @@ import logging
 from abc import ABC, abstractmethod
 from typing import Dict, Any, List
 
-from ..models import ProcessingResult, ProductHandle
-from ..config import ProcessingBackend
+from ..models import ProcessingResult
 
 logger = logging.getLogger("nisar.processing")
 

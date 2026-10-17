@@ -6,8 +6,7 @@ GDAL is imported lazily: unit tests without GDAL still import this module
 and only export-related tests are skipped.
 """
 import logging
-from pathlib import Path
-from typing import Optional, Tuple, Dict, Any
+from typing import Optional, Dict, Any
 
 import numpy as np
 
@@ -167,9 +166,9 @@ class ExportBackend:
                 band.WriteArray(data[..., 0] if data.shape[0] != height
                                 else data[0])
             self.finalize(ds)
-            del ds
+            ds = None
         except Exception as exc:
-            del ds
+            ds = None
             return ProcessingResult(success=False, error_message=str(exc))
 
         return ProcessingResult(
@@ -334,12 +333,9 @@ class ExportBackend:
                     except Exception:  # pragma: no cover
                         pass
             self.finalize(ds)
-            del ds
+            ds = None
         except Exception as exc:
-            try:
-                del ds
-            except Exception:  # pragma: no cover
-                pass
+            ds = None
             return ProcessingResult(success=False, error_message=str(exc))
 
         return ProcessingResult(

@@ -27,7 +27,7 @@ except ImportError:  # pragma: no cover - environment specific
 from .base import BaseReader, ReaderRegistry
 from . import product_layers as PL
 from ..models import (
-    ProductHandle, LayerInfo, GeorefInfo, DataStatus, ProductType, Instrument,
+    ProductHandle, LayerInfo, GeorefInfo, DataStatus, ProductType,
 )
 
 logger = logging.getLogger("nisar.readers.a3")

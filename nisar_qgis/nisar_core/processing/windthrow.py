@@ -427,9 +427,6 @@ def resample_fraction(src: np.ndarray, src_xs: np.ndarray,
     if sx.size < 2 or sy.size < 2 or dx.size < 2 or dy.size < 2:
         raise ValueError("degenerate coordinate arrays")
 
-    # source pixel size (handles ascending/descending y)
-    sdx = abs(sx[1] - sx[0])
-    sdy = abs(sy[0] - sy[-1]) / max(sy.size - 1, 1)
     ddx = abs(dx[1] - dx[0])
     ddy = abs(dy[0] - dy[-1]) / max(dy.size - 1, 1)
 

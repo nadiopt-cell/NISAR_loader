@@ -18,7 +18,7 @@ import pytest
 from nisar_qgis.nisar_core.readers.a3_h5py import A3H5PyReader
 from nisar_qgis.nisar_core.models import DataStatus, Polarization
 from nisar_qgis.nisar_core.processing.indices import (
-    NumpyProcessingBackend, VegetationIndex,
+    VegetationIndex,
     compute_hv_db, compute_cross_ratio, compute_rvi,
 )
 

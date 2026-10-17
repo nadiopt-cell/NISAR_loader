@@ -15,18 +15,15 @@ from qgis.PyQt.QtCore import QCoreApplication
 from qgis.core import (
     QgsProcessingAlgorithm, QgsProcessingParameterFile,
     QgsProcessingParameterRasterDestination,
-    QgsProcessingParameterVectorLayer,
     QgsProcessingParameterNumber, QgsProcessingParameterBoolean,
     QgsProcessingParameterString, QgsProcessingParameterFolderDestination,
     QgsProcessingParameterEnum,
-    QgsProcessingException, QgsRasterLayer, QgsProject,
-    QgsRasterMinMaxOrigin, QgsProcessingParameterFeatureSource,
+    QgsProcessingException, QgsRasterLayer, QgsRasterMinMaxOrigin, QgsProcessingParameterFeatureSource,
 )
 
 from ..nisar_core.processing.windthrow import (
     run_windthrow_did, WindthrowParams,
 )
-from ..i18n import tr
 
 
 def _config_dict():

@@ -22,7 +22,7 @@ except ImportError:  # pragma: no cover - optional dependency
 from .base import BaseAccessBackend, AccessRegistry, DownloadProgress
 from ..models import (
     SceneRecord, SearchParameters, DataStatus, ProductType, Instrument,
-    ProductLevel, Polarization,
+    ProductLevel,
 )
 
 logger = logging.getLogger("nisar.access.b3")

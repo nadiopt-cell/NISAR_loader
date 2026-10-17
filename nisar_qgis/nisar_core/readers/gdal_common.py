@@ -7,7 +7,7 @@ to a clear error message instead of an ImportError.
 """
 import logging
 import re
-from typing import List, Tuple, Dict, Any, Optional
+from typing import List, Tuple, Dict, Any
 
 logger = logging.getLogger("nisar.readers.gdal")
 

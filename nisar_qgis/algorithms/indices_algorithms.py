@@ -13,8 +13,8 @@ from qgis.core import (
     QgsProcessingAlgorithm, QgsProcessingParameterFile,
     QgsProcessingParameterString, QgsProcessingParameterBoolean,
     QgsProcessingParameterRasterDestination, QgsProcessingException,
-    QgsRasterLayer, QgsProject, QgsRasterMinMaxOrigin,
-    QgsCoordinateReferenceSystem, QgsLayerMetadata,
+    QgsRasterLayer, QgsRasterMinMaxOrigin,
+    QgsLayerMetadata,
 )
 
 from ..nisar_core.readers import ReaderRegistry

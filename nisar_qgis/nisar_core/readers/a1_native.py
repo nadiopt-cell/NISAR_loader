@@ -10,7 +10,6 @@ from typing import Tuple, Dict, Any, Optional
 
 from .base import BaseReader, ReaderRegistry
 from . import gdal_common as GC
-from . import product_layers as PL
 from ..models import ProductHandle, DataStatus
 
 logger = logging.getLogger("nisar.readers.a1")

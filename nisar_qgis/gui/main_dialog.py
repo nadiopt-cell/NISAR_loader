@@ -13,7 +13,7 @@ import re
 from datetime import datetime
 from pathlib import Path
 
-from qgis.PyQt.QtCore import Qt, QSize, QUrl
+from qgis.PyQt.QtCore import Qt, QUrl
 from qgis.PyQt.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QTabWidget, QWidget,
     QLabel, QLineEdit, QPushButton, QComboBox, QTableWidget,
@@ -23,7 +23,7 @@ from qgis.PyQt.QtWidgets import (
 from qgis.PyQt.QtGui import QColor, QFont, QPixmap, QDesktopServices
 from qgis.core import (
     QgsProject, QgsRasterLayer, QgsCoordinateReferenceSystem,
-    QgsCoordinateTransform, QgsGeometry, QgsMessageLog, QgsRectangle,
+    QgsCoordinateTransform, QgsGeometry, QgsRectangle,
     QgsWkbTypes,
 )
 from qgis.gui import QgsRubberBand
@@ -33,7 +33,7 @@ from ..i18n import tr, set_language
 from ..nisar_core.config import ReaderBackend, AccessBackend
 from ..nisar_core.models import ProductType, DataStatus
 from ..nisar_core.readers import ReaderRegistry
-from ..nisar_core.presets import PRESETS, get_preset, list_presets
+from ..nisar_core.presets import get_preset, list_presets
 from ..nisar_core.access.preview import scene_summary_pairs
 from .tasks import (
     NisarSearchTask, NisarDownloadTask, NisarComputeTask, NisarExportTask,
@@ -1465,7 +1465,6 @@ class NisarMainDialog(QDialog):
                                   result.metadata.get("formula", ""))
             lyr.setCustomProperty("nisar/how_to_read", tr(preset.how_to_read_key))
             try:
-                from qgis.core import QgsLayerMetadata
                 meta = lyr.metadata()
                 meta.setAbstract("%s\n\nFormula: %s\n%s" % (
                     tr(preset.purpose_key),

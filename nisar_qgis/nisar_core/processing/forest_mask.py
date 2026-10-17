@@ -328,7 +328,7 @@ def _forest_fraction_rasterio(georef: GeorefInfo, year: int, bbox_wgs84,
 
 def _read_hansen_gdal(bbox_wgs84, georef: GeorefInfo, version: str,
                       local_dir=None):
-    from osgeo import gdal, osr
+    from osgeo import gdal
     gdal.UseExceptions()
     target = _utm_30m_grid(georef)
 

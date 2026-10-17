@@ -14,7 +14,7 @@ docs/product_notes.md). dB products are computed as 10*log10(x).
 """
 import logging
 from dataclasses import dataclass
-from typing import Tuple, Optional, Dict, Any, List, Callable
+from typing import Tuple, Optional, Dict, Any, Callable
 
 import numpy as np
 
@@ -432,12 +432,9 @@ def compute_index_to_raster(handle: ProductHandle, index_id: str,
 
         band.FlushCache()
         exporter.finalize(ds)
-        del ds
+        ds = None
     except Exception as exc:
-        try:
-            del ds
-        except Exception:  # pragma: no cover
-            pass
+        ds = None
         return ProcessingResult(success=False, error_message=str(exc))
 
     return ProcessingResult(
