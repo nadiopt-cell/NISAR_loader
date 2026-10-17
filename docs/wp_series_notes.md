@@ -182,3 +182,18 @@ inside the running QGIS python. Full record:
 - GUI runtime paths (download queue, retry menu, disk-space bar) are
   construct-only here; live acceptance still needs a real download
   session with EDL credentials.
+## Live search/download/open acceptance (17.10.2026, real granule)
+
+First full end-to-end run of the plugin's own access stack with a real
+EDL token: B2 search (27 PROVISIONAL GCOV scenes, Kostroma AOI),
+DownloadManager (4 range-parallel parts, ~3.5 MB/s, atomic stitch,
+exact size match), A3 read of the REAL two-frequency product
+(EPSG:32638, A=20 m / B=80 m grids), hv_db + rvi algorithms in QGIS
+3.44.11 on the 2 GB real granule (Float32 GeoTIFF, correct CRS), the
+ambiguous `HVHV` key honestly refused (F14) on real data, frequencyB
+export verified against the 20 m statistics. Record in
+`tests/qgis/README.md`. Dependency note: `asf_search` 14.1.0 installed
+into the local dev Python for the run (optional plugin dependency,
+degrades gracefully without it).
+
+Acceptance item >= 5 GB / peak-RSS still open (this granule is 2 GB).

@@ -144,3 +144,37 @@ when the WKT is written to GeoTIFF. Real granules were never affected
 (their WKT is well-formed); the dual-polarization synthetic fixture
 always was. `conftest.py` is fixed; frequencyB exports now carry
 EPSG:32605 end-to-end.
+## Live end-to-end acceptance (2026-10-17, REAL granule, plugin v0.4.0)
+
+Real EDL-bearer-token session through the plugin's own access stack
+(asf_search 14.1.0 in a plain Python, no QGIS involved):
+
+1. **Search (B2)** - AOI polygon P((44.5 57.9, 45.2 58.3)),
+   17.06.2026-10.10.2026, L2 GCOV, PROVISIONAL+VALIDATED: **27 scenes**
+   over the Kostroma region, sizes 1.7-2.1 GB, statuses resolved from
+   the ASF metadata; no warnings.
+2. **Download (B2 -> DownloadManager)** - four range-parallel parts
+   (~3.5 MB/s), atomic stitching, final size matches ASF metadata
+   exactly: `NISAR_L2_PR_GCOV_023_108_D_059_2005_DHDH_A_20260621T164248_
+   ..._P05023_N_F_J_001.h5` (2080.4 MB). EDL token consumed strictly
+   via the `EDL_TOKEN` env (never logged, never persisted).
+3. **Read (A3)** - real two-frequency product: frequencyA
+   19008x19044 @ 20 m and frequencyB 4752x4761 @ 80 m, EPSG:32638,
+   `identification` complete (granuleId, compositeReleaseId `P05023`
+   -> PROVISIONAL, frame 59, orbit 4705, look Left, pass Descending).
+4. **Algorithms in QGIS 3.44.11 (qgis_process)**:
+   - `nisar:hv_db`, `nisar:rvi` on the REAL granule -> Float32 GeoTIFF
+     19044x19008, EPSG:32638, HV dB decimated stats: median -9.8 dB,
+     IQR [-11.5..-8.4] (plausible summer mid-latitude land cover),
+     RVI [0.001..3.999] (dual-pol formula, upper bound 4);
+   - `nisar:export` with the ambiguous key `HVHV` correctly REFUSED
+     with an `AmbiguousLayerError` naming the unique ids
+     (`frequencyA/HVHV, frequencyB/HVHV`) - F14 no-guessing confirmed
+     on real data; the exact key `frequencyB/HVHV` exported the 80 m
+     grid, linear power (0.03-0.31 == -15..-5 dB, consistent with the
+     frequencyA HV dB values at 20 m).
+5. No `.aux.xml` sidecars created next to the 2 GB source.
+
+Not covered: peak-RSS measurement on the big file (acceptance item 9
+demands a >= 5 GB file - still open), GSLC/RSLC streaming, CONUS-like
+BETA products.
