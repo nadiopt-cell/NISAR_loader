@@ -18,4 +18,4 @@ def classFactory(iface):  # noqa: N802 - required QGIS entry point name
     return NisarPlugin(iface)
 
 
-__version__ = "0.3.2"
+__version__ = "0.4.0"
