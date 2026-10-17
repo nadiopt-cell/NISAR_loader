@@ -14,7 +14,10 @@ from pathlib import Path
 
 import requests
 
-TOKEN = Path("/home/z/my-project/upload/edl_token.txt").read_text().strip()
+# WP-3: the EDL token comes from the environment, never a file path
+TOKEN = os.environ.get("EDL_TOKEN", "").strip()
+if not TOKEN:
+    sys.exit("EDL_TOKEN environment variable is not set")
 OUT = Path("/home/z/my-project/upload/nisar_new")
 B = "https://nisar.asf.earthdatacloud.nasa.gov/NISAR/NISAR_L2_GUNW_PROVISIONAL_V1"
 BUDGET = int(os.environ.get("BUDGET", "460"))

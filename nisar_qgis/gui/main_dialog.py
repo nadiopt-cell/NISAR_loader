@@ -1112,8 +1112,76 @@ class NisarMainDialog(QDialog):
             QMessageBox.warning(self, tr("ui.warning"), str(exc))
 
     # ============================================================= Download
+    def _apply_qgis_proxies(self, cfg):
+        """Map the QGIS proxy settings onto requests proxies (WP-3).
+
+        Reads the QgsSettings proxy group; [CHECK] the exact key names
+        against the installed QGIS version in the integration run.
+        """
+        if cfg.get("proxies"):
+            return
+        try:
+            from qgis.core import QgsSettings
+            settings = QgsSettings()
+            if not settings.value("proxy/proxyEnabled", False, type=bool):
+                return
+            host = str(settings.value("proxy/proxyHost", "") or "")
+            port = str(settings.value("proxy/proxyPort", "") or "")
+            if not host:
+                return
+            user = str(settings.value("proxy/proxyUser", "") or "")
+            password = str(settings.value("proxy/proxyPassword", "") or "")
+            proxy_type = str(settings.value("proxy/proxyType", "") or "")
+            scheme = "https" if "https" in proxy_type.lower() else "http"
+            auth = ("%s:%s@" % (user, password)) if user else ""
+            url = "%s://%s%s:%s" % (scheme, auth, host, port)
+            cfg["proxies"] = {"http": url, "https": url}
+        except Exception:
+            pass  # proxy detection is best effort
+
+    def _check_disk_space(self, scenes, download_dir, cfg) -> bool:
+        """WP-3: total size estimate + free-space check before starting.
+
+        Uses the search metadata sizes when available; unknown sizes are
+        probed with HEAD (best effort, honest warning when skipped).
+        """
+        try:
+            from ..nisar_core.access.download_manager import DownloadManager
+            manager = DownloadManager(cfg)
+            known = 0
+            unknown_urls = []
+            for scene in scenes:
+                size = int(getattr(scene, "size_bytes", 0) or 0)
+                if size:
+                    known += size
+                elif scene.urls.get("download"):
+                    unknown_urls.append(scene.urls["download"])
+            total = known
+            if unknown_urls:
+                net_total = manager.estimate_total_size(unknown_urls)
+                if net_total is None:
+                    self._push_message_bar(
+                        "the size of some scenes is unknown - proceeding "
+                        "without a full space check", warning=True)
+                else:
+                    total += net_total
+            if not total:
+                return True
+            ok, free = manager.check_free_space(download_dir, total)
+            if not ok:
+                QMessageBox.critical(
+                    self, tr("ui.error"),
+                    tr("ui.download.no_space").format(
+                        n=len(scenes),
+                        needed=total // (1024 * 1024),
+                        free=free // (1024 * 1024)))
+                return False
+        except Exception as exc:
+            self._push_message_bar(
+                "size/space check skipped: %s" % exc, warning=True)
+        return True
+
     def _on_download_clicked(self):
-        from qgis.core import QgsApplication
         from ..nisar_core.access import AccessRegistry
 
         selected = self._selected_scenes()
@@ -1122,12 +1190,15 @@ class NisarMainDialog(QDialog):
                                     tr("ui.download.no_scenes"))
             return
 
+        cfg = config_as_dict(self.config)
+        self._apply_qgis_proxies(cfg)
+
         try:
             backend_class = AccessRegistry.select_backend(
                 self.config.access_backend.value)
             if backend_class.BACKEND_ID == "B1_local":
                 raise ValueError("local backend cannot download")
-            backend = backend_class(config_as_dict(self.config))
+            backend = backend_class(cfg)
         except Exception as exc:
             QMessageBox.critical(
                 self, tr("ui.error"),
@@ -1135,23 +1206,64 @@ class NisarMainDialog(QDialog):
             return
 
         download_dir = Path(self.config.download_dir)
+        if not self._check_disk_space(selected, download_dir, cfg):
+            return
+
+        # batch state for the consolidated error report (WP-3)
+        self._dl_failed = {}
+        self._dl_total = len(selected)
+        self._dl_finished = 0
+        self._dl_cfg = cfg
+        self._dl_backend = backend
         self.download_table.setRowCount(0)
-        for scene in selected:
+        self._prepare_download_menu()
+        self._start_download_tasks(selected)
+
+    def _prepare_download_menu(self):
+        """Context menu with a retry action for failed rows (WP-3)."""
+        self.download_table.setContextMenuPolicy(Qt.CustomContextMenu)
+        if not getattr(self, "_dl_menu_connected", False):
+            self.download_table.customContextMenuRequested.connect(
+                self._on_download_menu)
+            self._dl_menu_connected = True
+
+    def _start_download_tasks(self, scenes, backend=None):
+        """Queue scene downloads as background tasks."""
+        from qgis.core import QgsApplication
+        download_dir = Path(self.config.download_dir)
+        backend = backend or getattr(self, "_dl_backend", None)
+        if backend is None:
+            return
+        for scene in scenes:
             row = self.download_table.rowCount()
             self.download_table.insertRow(row)
-            self.download_table.setItem(row, 0,
-                                        QTableWidgetItem(scene.scene_id))
+            self.download_table.setItem(
+                row, 0, QTableWidgetItem(scene.scene_id))
             self.download_table.setItem(row, 1, QTableWidgetItem("0%"))
             self.download_table.setItem(row, 2, QTableWidgetItem("…"))
-
             task = NisarDownloadTask(scene, download_dir, backend,
-                                     config_as_dict(self.config))
+                                     self._dl_cfg)
             task.signals.download_progress.connect(
                 self._on_download_progress)
+            task.signals.download_failed.connect(
+                self._on_download_failed_row)
             task.signals.finished_ok.connect(self._on_download_done)
-            task.signals.finished_error.connect(self._on_download_failed)
             self._tasks.append(task)
             QgsApplication.taskManager().addTask(task)
+
+    def _on_download_menu(self, point):
+        failed = dict(getattr(self, "_dl_failed", {}) or {})
+        if not failed:
+            return
+        from qgis.PyQt.QtWidgets import QMenu
+        menu = QMenu(self)
+        action = menu.addAction(tr("ui.download.retry"))
+        chosen = menu.exec_(self.download_table.viewport().mapToGlobal(point))
+        if chosen is action:
+            self._dl_failed = {}
+            scenes = [s for s in (self._scenes or [])
+                      if s.scene_id in failed]
+            self._start_download_tasks(scenes)
 
     def _selected_scenes(self):
         selected = []
@@ -1177,10 +1289,33 @@ class NisarMainDialog(QDialog):
         self._update_download_row(progress.scene_id, percent="100%",
                                   status=tr("ui.download.done").format(
                                       path=progress.file_path))
+        self._dl_finished = getattr(self, "_dl_finished", 0) + 1
+        self._finish_download_batch()
 
-    def _on_download_failed(self, message):
-        QMessageBox.critical(self, tr("ui.error"),
-                             tr("ui.download.failed").format(error=message))
+    def _on_download_failed_row(self, scene_id, message):
+        """WP-3: the row gets an "error: reason" status; ONE consolidated
+        report per batch instead of a modal window per scene."""
+        short = str(message).splitlines()[0][:200]
+        self._update_download_row(str(scene_id), percent="—",
+                                  status="error: %s" % short)
+        failed = getattr(self, "_dl_failed", None)
+        if failed is None:
+            failed = self._dl_failed = {}
+        failed[str(scene_id)] = short
+        self._dl_finished = getattr(self, "_dl_finished", 0) + 1
+        self._finish_download_batch()
+
+    def _finish_download_batch(self):
+        total = getattr(self, "_dl_total", 0)
+        if total and self._dl_finished < total:
+            return
+        failed = getattr(self, "_dl_failed", {}) or {}
+        if failed:
+            detail = "; ".join("%s: %s" % (sid, msg)
+                               for sid, msg in failed.items())[:300]
+            self._push_message_bar(
+                tr("ui.download.batch_errors").format(
+                    n=len(failed), m=total, detail=detail), warning=True)
 
     def _update_download_row(self, scene_id, percent=None, status=None):
         for row in range(self.download_table.rowCount()):

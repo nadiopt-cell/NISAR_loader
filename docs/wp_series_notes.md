@@ -97,3 +97,37 @@
   исключение -> SearchError; ровно лимит -> ходе; сцена в последний день
   найдена (end=23:59:59Z); MultiPolygon парсится. Suite: 196 passed,
   1 skipped; ruff F чисто.
+
+## WP-3 - надёжное скачивание (DownloadManager)
+- `nisar_core/access/download_manager.py` (ядро, без QGIS), схема проверенного на
+  реальных GUNW `validation/windthrow_new_sites/nisar_dl.py`: N параллельных
+  HTTP-Range-частей -> `<name>.part<i>` (докачка через append при обрыве/повторе),
+  сшивка в `<name>.h5.partial` + fsync + проверка размера + атомарный
+  `os.replace` в итоговое имя; обрезанный файл под итоговым именем никогда не
+  считается готовым (перекачивается).
+- Отмена: `threading.Event` проверяется на каждом блоке; при отмене итогового
+  файла нет, part-файлы остаются для докачки; отсановка за блок-границу (<2 с в
+  тесте). `DownloadCancelled`/`DownloadError`.
+- Конфиг: `max_concurrent_downloads` (очередь, ThreadPool), `request_timeout`,
+  `download_chunk_size`, `verify_ssl`, `proxies`, `download_parts`,
+  `download_retries`; User-Agent с версией плагина (единый источник версии).
+- EDL-токен: config `edl_token` ИЛИ env `EDL_TOKEN` (без путей в коде);
+  `validation/.../nisar_dl.py` теперь читает `EDL_TOKEN` вместо жёсткого пути.
+  Интеграция с QgsAuthManager - [ПРОВЕРИТЬ] на интеграционном прогоне (нужен
+  существующий authcfg; оставлено на следующий шаг приёма).
+- B2: `download()` делегирует DownloadManager (Range/докачка/размер), сигнатура
+  приняла `cancel_event=`; GET 200 вместо 206 при непустом resume -> явная
+  ошибка (Range не поддержан сервером). Прокси QGIS: `_apply_qgis_proxies`
+  (QgsSettings proxy/* -> proxies) - [ПРОВЕРИТЬ] ключи настроек в QGIS.
+- `get_local_path` строгий: точное имя гранулы, никогда `.part/.partial`,
+  совпадение размера при известном ожидаемом; «новейший *.h5»-фолбэк удалён.
+- GUI: ошибки пакета - один message-bar отчёт (строка таблицы получает
+  `error: причина`, отмена - статус cancelled), в контекстном меню таблицы
+  «Повторить скачивание» для упавших; оценка размера + проверка свободного
+  места ДО старта (по метаданным, иначе HEAD; пропуск с явным предупреждением).
+- Приёмка (tests/unit/test_download_manager.py, локальный HTTP-сервер с Range):
+  обрыв -> докачка = sha256-идентичный файл; отмена < 2 с, файла нет, parts
+  есть; обрезанный файл перекачивается; максимум 2 активных из 5 при
+  max_concurrent=2; estimate/free-space; UA/EDL-заголовки; timeout/verify_ssl/
+  proxies доходят до requests; строгий get_local_path. Suite: 205 passed,
+  1 skipped; ruff F чисто.

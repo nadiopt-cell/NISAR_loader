@@ -390,53 +390,54 @@ class B2ASFSearchBackend(BaseAccessBackend):
 
     # -------------------------------------------------------------- download
     def download(self, scene: SceneRecord, output_dir: Path,
-                 progress_callback=None) -> Path:
-        """Download via asf_search (netrc auth) with progress callbacks."""
-        if not ASF_SEARCH_AVAILABLE:
-            raise RuntimeError("asf_search is not available (%s)" % self.DEPENDENCY_HINT)
+                 progress_callback=None, cancel_event=None) -> Path:
+        """Download via the WP-3 DownloadManager.
+
+        Range-parallel parts with resume, size verification and an
+        atomic final rename. Auth: ``~/.netrc`` (handled by requests)
+        or a Bearer token from the config / ``EDL_TOKEN`` env - no
+        tokens or file paths are ever stored in the code.
+        """
+        from .download_manager import (
+            DownloadError, DownloadManager, REQUESTS_AVAILABLE,
+        )
+        if not REQUESTS_AVAILABLE:
+            raise RuntimeError("requests is not available (pip install "
+                               "requests)")
 
         url = scene.urls.get("download")
         if not url:
             raise ValueError("No download URL for scene %s" % scene.scene_id)
+        if not str(url).lower().startswith(("http://", "https://")):
+            raise DownloadError(
+                "B2 can only download http(s) URLs (got %r); use the "
+                "S3/streaming backend for other schemes" % str(url)[:40])
 
         output_dir = Path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
-        filename = url.rstrip("/").split("/")[-1]
-        output_path = output_dir / filename
+        filename = str(url).rstrip("/").split("/")[-1]
 
-        def report(status, downloaded=0, total=None, error="", path=""):
+        def report(done, total, status, path):
             if progress_callback:
                 progress_callback(DownloadProgress(
                     scene_id=scene.scene_id,
-                    bytes_downloaded=downloaded,
-                    total_bytes=total if total is not None else scene.size_bytes,
+                    bytes_downloaded=done,
+                    total_bytes=total if total is not None
+                    else scene.size_bytes,
                     status=status,
-                    error_message=error,
                     file_path=path,
                 ))
 
+        manager = DownloadManager(self.config)
         try:
-            report("downloading", 0)
-            # asf_search's download_url streams via the session; auth is
-            # whatever the session carries (netrc / token / cookies).
-            asf.download_url(
-                url=url, path=str(output_dir), session=self.session,
-                filename=filename,
-            )
-            if not output_path.exists():
-                # File name from URL may differ — accept any new .h5.
-                candidates = sorted(output_dir.glob("*.h5"),
-                                     key=lambda p: p.stat().st_mtime,
-                                     reverse=True)
-                if candidates:
-                    output_path = candidates[0]
-            report("completed", scene.size_bytes, scene.size_bytes,
-                   path=str(output_path))
-            return output_path
+            path = manager.download_scene(
+                url, output_dir, filename=filename,
+                expected_size=scene.size_bytes or 0,
+                cancel_event=cancel_event,
+                progress_cb=report,
+                scene_id=scene.scene_id)
         except Exception as exc:
-            report("failed", 0, scene.size_bytes, error=str(exc))
-            # Hint about credentials only when the failure smells auth-ish;
-            # a kwarg/typo error must not send the user chasing .netrc.
+            report(0, scene.size_bytes, "failed", "")
             blob = str(exc).lower()
             authy = any(w in blob for w in (
                 "401", "403", "unauthorized", "forbidden", "login",
@@ -444,21 +445,40 @@ class B2ASFSearchBackend(BaseAccessBackend):
             hint = (" Hint: check your Earthdata credentials (~/.netrc "
                     "with machine urs.earthdata.nasa.gov, or a valid EDL "
                     "token)." if authy else "")
+            if isinstance(exc, RuntimeError):
+                raise
             raise RuntimeError(
-                "Download failed for %s: %s.%s" % (scene.scene_id, exc, hint))
+                "Download failed for %s: %s.%s"
+                % (scene.scene_id, exc, hint))
+        report(scene.size_bytes, scene.size_bytes, "completed", str(path))
+        return path
 
     def get_local_path(self, scene: SceneRecord) -> Optional[Path]:
+        """Local path of a previously downloaded scene, or None.
+
+        Strict (WP-3): the file counts as ready only when it exists
+        under the FINAL name (exact granule id, never a ``.part``/
+        ``.partial`` leftover) AND its size matches the known scene
+        size (when known). The old "newest ``*.h5``" fallback accepted
+        truncated files and is gone.
+        """
         download_dir = Path(self.config.get(
             "download_dir", str(Path.home() / "Downloads" / "NISAR")))
-        base = scene.scene_id
-        for candidate in (base, base + ".h5", base.replace(".h5", "")):
-            path = download_dir / candidate
-            if path.suffix == ".h5" and path.exists():
-                return path
-        # Fallback: any file starting with the scene id.
-        if download_dir.exists():
-            for path in download_dir.glob(base + "*.h5"):
-                return path
+        base = str(scene.scene_id)
+        names = [base] if base.endswith(".h5") else [base, base + ".h5"]
+        expected = int(getattr(scene, "size_bytes", 0) or 0)
+        for name in names:
+            path = download_dir / name
+            if path.suffix != ".h5" or not path.exists():
+                continue
+            if path.name.endswith((".part", ".partial")):
+                continue
+            have = path.stat().st_size
+            if have <= 0:
+                continue
+            if expected and have != expected:
+                continue    # truncated copy - never report as ready
+            return path
         return None
 
 

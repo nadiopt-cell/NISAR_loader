@@ -114,6 +114,9 @@ I18N_RU = {
     "ui.download.started": "Скачивание запущено для сцен: {n}.",
     "ui.download.done": "Скачано: {path}",
     "ui.download.failed": "Ошибка скачивания: {error}",
+    "ui.download.no_space": "Недостаточно места на диске для {n} сцен(ы): нужно {needed} МБ, свободно {free} МБ.",
+    "ui.download.retry": "Повторить скачивание",
+    "ui.download.batch_errors": "Не удалось скачать {n} из {m}: {detail}",
     "ui.download.hint_netrc": (
         "Скачивание с ASF требует Earthdata Login. Настройте ~/.netrc:\n"
         "machine urs.earthdata.nasa.gov\n  login ВАШ_ЛОГИН_EDL\n"

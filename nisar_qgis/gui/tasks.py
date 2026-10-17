@@ -6,7 +6,9 @@ All heavy work runs here so the GUI stays responsive (TZ principle 4).
 Progress/results are delivered to the GUI thread via Qt signals
 (queued connections), never by touching widgets from run().
 """
+import inspect
 import logging
+import threading
 from datetime import datetime
 from pathlib import Path
 
@@ -16,6 +18,9 @@ from qgis.core import QgsTask, QgsMessageLog
 from ..qt_compat import LEVEL_INFO, LEVEL_WARNING
 
 from ..nisar_core.access.base import DownloadProgress
+from ..nisar_core.access.download_manager import (
+    DownloadCancelled,
+)
 from ..nisar_core.models import SceneRecord, SearchParameters
 
 logger = logging.getLogger("nisar.gui.tasks")
@@ -25,6 +30,7 @@ class TaskSignals(QObject):
     """Shared signals for all plugin tasks (emitted from worker threads)."""
     progress = pyqtSignal(int)                       # percent 0..100
     download_progress = pyqtSignal(object)            # DownloadProgress
+    download_failed = pyqtSignal(str, str)   # scene_id, reason (WP-3)
     finished_ok = pyqtSignal(object)                  # result payload
     finished_error = pyqtSignal(str)                  # error message
 
@@ -87,10 +93,13 @@ class NisarDownloadTask(QgsTask):
         self.backend = backend
         self.config = config
         self.signals = TaskSignals()
+        self._cancel_event = threading.Event()
 
     def run(self):
         def progress_cb(prog: DownloadProgress):
             if self.isCanceled():
+                # stop the streams within ~one block (WP-3: cancel <= 2 s)
+                self._cancel_event.set()
                 return
             self.signals.download_progress.emit(prog)
             if prog.total_bytes > 0:
@@ -98,14 +107,26 @@ class NisarDownloadTask(QgsTask):
                                      / prog.total_bytes))
 
         try:
-            path = self.backend.download(self.scene, self.output_dir,
-                                         progress_callback=progress_cb)
+            supports_cancel = "cancel_event" in inspect.signature(
+                self.backend.download).parameters
+            if supports_cancel:
+                path = self.backend.download(
+                    self.scene, self.output_dir,
+                    progress_callback=progress_cb,
+                    cancel_event=self._cancel_event)
+            else:
+                path = self.backend.download(
+                    self.scene, self.output_dir,
+                    progress_callback=progress_cb)
             self._path = str(path)
             self.setProgress(100)
             return True
+        except DownloadCancelled:
+            self._cancelled = True
+            return False
         except Exception as exc:
             logger.exception("Download task failed")
-            self._error = str(exc)
+            self._error = str(exc) or type(exc).__name__
             return False
 
     def finished(self, success):
@@ -120,8 +141,17 @@ class NisarDownloadTask(QgsTask):
                                  status="completed",
                                  file_path=self._path))
         else:
-            msg = getattr(self, "_error", "Download failed")
-            self.signals.finished_error.emit(msg)
+            if getattr(self, "_cancelled", False):
+                # a cancel is not an error: update the row and stay quiet
+                self.signals.download_progress.emit(DownloadProgress(
+                    scene_id=self.scene.scene_id,
+                    bytes_downloaded=0,
+                    total_bytes=self.scene.size_bytes,
+                    status="cancelled"))
+            else:
+                msg = getattr(self, "_error", "Download failed")
+                self.signals.download_failed.emit(
+                    self.scene.scene_id, msg)
 
 
 class NisarComputeTask(QgsTask):

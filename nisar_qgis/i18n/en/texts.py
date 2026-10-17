@@ -114,6 +114,9 @@ I18N_EN = {
     "ui.download.started": "Download started for {n} scene(s).",
     "ui.download.done": "Downloaded: {path}",
     "ui.download.failed": "Download failed: {error}",
+    "ui.download.no_space": "Not enough disk space for {n} scene(s): need {needed} MB, free {free} MB.",
+    "ui.download.retry": "Retry download",
+    "ui.download.batch_errors": "Download failed for {n} of {m}: {detail}",
     "ui.download.hint_netrc": (
         "ASF downloads require Earthdata Login. Configure ~/.netrc:\n"
         "machine urs.earthdata.nasa.gov\n  login YOUR_EDL_USER\n"
