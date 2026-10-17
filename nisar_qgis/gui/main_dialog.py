@@ -31,12 +31,14 @@ from qgis.gui import QgsRubberBand
 from ..config_manager import config_manager, config_as_dict
 from ..i18n import tr, set_language
 from ..nisar_core.config import ReaderBackend, AccessBackend
+from ..nisar_core.geo import select_layer_crs
 from ..nisar_core.models import (
     DataStatus, ProductType, output_name_with_frequency,
 )
 from ..nisar_core.readers import ReaderRegistry
 from ..nisar_core.presets import get_preset, list_presets
 from ..nisar_core.access.preview import scene_summary_pairs
+from ..nisar_core.processing.windthrow import format_metric
 from .tasks import (
     NisarSearchTask, NisarDownloadTask, NisarComputeTask, NisarExportTask,
     NisarPreviewTask, NisarWindthrowTask,
@@ -617,11 +619,12 @@ class NisarMainDialog(QDialog):
             lines.append("%s: %s" % (tr("ui.windthrow.r_flags"),
                                      ", ".join(report["flags"])))
         if metrics:
-            lines.append("%s: AUC=%.3f | excess=%.3f | TPR@FPR5%%=%.3f "
+            lines.append("%s: AUC=%s | excess=%s | TPR@FPR5%%=%s "
                          "(n_ref=%s, n_bg=%s)" % (
                              tr("ui.windthrow.r_metrics"),
-                             metrics.get("auc"), metrics.get("excess"),
-                             metrics.get("tpr_fpr05"),
+                             format_metric(metrics.get("auc")),
+                             format_metric(metrics.get("excess")),
+                             format_metric(metrics.get("tpr_fpr05")),
                              metrics.get("n_ref"), metrics.get("n_bg")))
         for warning in report.get("warnings") or []:
             lines.append("⚠ %s" % warning)
@@ -1347,14 +1350,22 @@ class NisarMainDialog(QDialog):
                                 "Invalid raster layer: %s" % tif_path)
             return
 
-        # Explicit CRS from the product georef (never guessed).
+        # F4/WP-5: an OUTPUT raster's own CRS always wins. The
+        # source-product georef applies only as an explicit fallback for
+        # CRS-less outputs, so e.g. dcoh.tif keeps its own CRS even while
+        # a different product is open in this dialog.
         georef = self._handle.georef if self._handle else None
-        if georef is not None:
+        fallback_authid = (georef.crs_authid or "") if georef else ""
+        fallback_wkt = (georef.crs_wkt or "") if georef else ""
+        crs_pair = select_layer_crs(layer.crs().isValid(),
+                                    fallback_authid, fallback_wkt)
+        if crs_pair is not None:
+            authid, wkt = crs_pair
             crs = None
-            if georef.crs_wkt:
-                crs = QgsCoordinateReferenceSystem.fromOgcWkt(georef.crs_wkt)
-            if (crs is None or not crs.isValid()) and georef.crs_authid:
-                crs = QgsCoordinateReferenceSystem(georef.crs_authid)
+            if wkt:
+                crs = QgsCoordinateReferenceSystem.fromOgcWkt(wkt)
+            if (crs is None or not crs.isValid()) and authid:
+                crs = QgsCoordinateReferenceSystem(authid)
             if crs is not None and crs.isValid():
                 layer.setCrs(crs)
 

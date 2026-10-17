@@ -39,3 +39,37 @@
 - Проверено запуском: 167 passed, 1 skipped; матрица наборов
   {HHHH,HVHV} / {VHVH,VVVV} / full-pol / {HHHH} / {HVHV} — в
   tests/unit/test_preset_polarization_classes.py.
+
+## WP-5 - ветровал: корректность входов/выходов
+- `nisar_core/geo.py` (новый, ядро без QGIS): `select_layer_crs` (собственный
+  CRS выходного растра всегда победил; georef продукта - только fallback),
+  `bbox_wgs84_from_georef` (EPSG:4326 passthrough -> OSR -> pyproj ->
+  аналитический обратный UTM), `utm_forward`/`utm_inverse` (схема
+  Снайдера, футпойнт-ряд), `utm_zone_from_authid` (EPSG:326xx/327xx).
+- Эталоны UTM посчитаны один раз pyproj 3.7.1 (EPSG:32632 Мюнхен,
+  32735 Йоханнесбург, 32618 Майами вне ЦМ, 32717 Лима): forward < 5 см,
+  обратная < 5e-7 град; допуск ТЗ 0.05 град - tests/unit/test_geo.py.
+- `_approx_bbox_wgs84` оставлен alias-ом на реальный transform; старый
+  масштабный хак «x/111320» удалён (ошибался на градусы вдали от ЦМ зоны).
+- forest_mask: ошибки тайлов не «глотаются»: `_forest_fraction_rasterio`
+  возвращает (маска, failed_tiles, n_tiles); предупреждение с точным
+  покрытием; откат на GDAL-путь - с ЯВНЫМ предупреждением; параметр
+  `strict=False` (в Processing-алгоритме - новый STRICT_FOREST, default
+  True: RuntimeError -> QgsProcessingException); при невычислимом WGS84
+  bbox strict тоже ругается, permissive возвращает None+warning.
+- windthrow: ref-полигоны вне сетки -> прогон завершается без исключения:
+  предупреждение «reference.overlap = 0», background = вся валидная сцена,
+  metrics = {}; отчёт["reference"]["overlap"]; `format_metric` (None ->
+  «n/a») в GUI и алгоритме.
+- `_rasterize_reference`: геометрии перпроектируются из CRS источника в CRS
+  растра ДО записи GPKG (gdal.Rasterize не перепроектирует); deprecated ctor
+  заменён на QgsVectorFileWriter.create() + SaveVectorOptions;
+  QVariant.Int -> QMetaType.Type.Int с fallback (Qt5/Qt6). [ПРОВЕРИТЬ]
+  точную сигнатуру create() на QGIS 3.28/3.44 в интеграционном прогоне
+  (tests/qgis/README.md), включая headless qgis_process.
+- `_add_raster_layer` GUI: CRS - через чистую select_layer_crs,
+  dcoh.tif сохраняет собственный CRS даже при открытом другом продукте
+  (юнит-тест, acceptance ТЗ).
+- Состояние: 187 passed, 1 skipped; ruff F чисто. В юнит-окружении GDAL
+  и pyproj отсутствуют - аналитический UTM-обратник проверен против
+  pyproj-якорей NUMBER-ов в тестах; OSR/pyproj ветки работают в QGIS.

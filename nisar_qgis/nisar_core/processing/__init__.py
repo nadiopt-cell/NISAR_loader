@@ -14,7 +14,7 @@ from .windthrow import (
     DetectionResult, parse_gunw_pair_info, check_pair_compatibility,
     find_coherence_layer, compute_dcoh, hansen_forest_mask_year,
     resample_fraction, ring_background_mask, detect_windthrow,
-    windthrow_metrics, run_windthrow_did,
+    windthrow_metrics, run_windthrow_did, format_metric,
 )
 
 __all__ = [
@@ -27,5 +27,5 @@ __all__ = [
     'DetectionResult', 'parse_gunw_pair_info', 'check_pair_compatibility',
     'find_coherence_layer', 'compute_dcoh', 'hansen_forest_mask_year',
     'resample_fraction', 'ring_background_mask', 'detect_windthrow',
-    'windthrow_metrics', 'run_windthrow_did',
+    'windthrow_metrics', 'run_windthrow_did', 'format_metric',
 ]

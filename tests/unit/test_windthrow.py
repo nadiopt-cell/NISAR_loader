@@ -14,6 +14,7 @@ from nisar_qgis.nisar_core.processing.windthrow import (
     compute_dcoh, detect_windthrow, hansen_forest_mask_year,
     resample_fraction, ring_background_mask, windthrow_metrics,
     run_windthrow_did, find_coherence_layer,
+    format_metric,
 )
 from nisar_qgis.nisar_core.processing.forest_mask import (
     hansen_tile_suffixes, hansen_layer_urls, bbox_from_bounding_polygon,
@@ -438,3 +439,29 @@ def test_detect_windthrow_absolute_vs_mad_sensitivity():
     far[16:34, 16:34] = False
     far[:10, :] = False
     assert (det_abs.mask & far).sum() <= (det_mad.mask & far).sum()
+
+
+def test_format_metric():
+    # WP-5: None metrics (e.g. zero reference overlap) render as n/a
+    assert format_metric(None) == "n/a"
+    assert format_metric(0.5) == "0.500"
+    assert format_metric("x") == "x"
+
+
+def test_run_windthrow_did_reference_off_grid(gunw_storm, gunw_control,
+                                              tmp_path):
+    # WP-5 acceptance: polygons outside the grid -> no exception,
+    # report reference.overlap = 0 and an explicit warning
+    empty = np.zeros((GH, GW), dtype=bool)
+    result = run_windthrow_did(
+        gunw_storm, gunw_control, output_dir=str(tmp_path),
+        event_date=datetime(2026, 6, 22),
+        ref_mask=empty,
+        progress_callback=None)
+    assert result.success, result.error_message
+    assert result.metadata["reference"]["overlap"] == 0
+    assert result.metadata["metrics"] == {}
+    assert any("reference.overlap = 0" in w for w in result.warnings)
+    report_json = (tmp_path / "windthrow_report.json").read_text(
+        encoding="utf-8")
+    assert '"reference"' in report_json
