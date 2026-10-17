@@ -27,3 +27,15 @@
 - Заодно укреплено: `_extract_identification` теперь не падает на
   многозначных полях identification (listOfFrequencies=[A,B] и т. п.) —
   упало при создании двухчастотной фикстуры, исправление в a3_h5py.
+
+## WP-2 — поляризационно-независимые пресеты + ProductType
+- `PresetRequirement.cross_pol_required` / `co_pol_required` (HVHV|VHVH /
+  HHHH|VVVV); hv_db, cross_ratio, rvi, change_db переведены на классы.
+- `check_availability` сравнивает значения поляризаций (строки .value) —
+  переживает перезагрузку модулей под qgis-mocks; None-handle/слои —
+  гр ацелфульные причины, не исключения.
+- Все ридеры возвращают ProductType (a1/a2 `_guess_product_type`, +GUNW);
+  `coerce_product_type` + `__post_init__` в ProductHandle/SceneRecord.
+- Проверено запуском: 167 passed, 1 skipped; матрица наборов
+  {HHHH,HVHV} / {VHVH,VVVV} / full-pol / {HHHH} / {HVHV} — в
+  tests/unit/test_preset_polarization_classes.py.

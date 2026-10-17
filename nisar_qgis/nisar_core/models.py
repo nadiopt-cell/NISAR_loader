@@ -159,6 +159,25 @@ def resolve_layer(handle, key: Optional[str]):
            " ..." if len(layers) > 10 else ""))
 
 
+def coerce_product_type(value) -> Optional[ProductType]:
+    """WP-2 (F13): readers used to hand 'GCOV' strings around; convert
+    str / ProductType / other to ProductType. Unrecognized input stays
+    None, the plugin must not guess (AGENTS.md)."""
+    if isinstance(value, ProductType):
+        return value
+    if value is None:
+        return None
+    text = str(value).strip().upper()
+    try:
+        return ProductType(text)
+    except ValueError:
+        for member in (ProductType.GCOV, ProductType.GSLC,
+                       ProductType.RSLC, ProductType.GUNW):
+            if member.value in text:
+                return member
+        return None
+
+
 def output_name_with_frequency(base: str, name: str,
                                frequency: Optional[str],
                                ext: str = ".tif") -> str:
@@ -239,6 +258,10 @@ class ProductHandle:
     product_type: Optional[ProductType] = None
     data_status: DataStatus = DataStatus.UNKNOWN
 
+    def __post_init__(self):
+        # WP-2 (F13): defensive coercion of legacy string product types.
+        self.product_type = coerce_product_type(self.product_type)
+
     def list_layers(self) -> List[LayerInfo]:
         return self.layers
 
@@ -306,6 +329,9 @@ class SceneRecord:
     @property
     def is_provisional(self) -> bool:
         return self.status == DataStatus.PROVISIONAL
+
+    def __post_init__(self):
+        self.product_type = coerce_product_type(self.product_type)
 
     def short_description(self) -> str:
         return f"{self.scene_id} | {self.product_type.value} | {self.instrument.value} | {self.status.value} | {self.acquisition_time.date()}"

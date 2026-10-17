@@ -10,7 +10,7 @@ from typing import Tuple, Dict, Any, Optional
 
 from .base import BaseReader, ReaderRegistry
 from . import gdal_common as GC
-from ..models import ProductHandle, DataStatus
+from ..models import ProductHandle, DataStatus, ProductType
 
 logger = logging.getLogger("nisar.readers.a1")
 
@@ -84,11 +84,12 @@ class A1NativeReader(BaseReader):
             raise
 
     @staticmethod
-    def _guess_product_type(path: str) -> Optional[str]:
+    def _guess_product_type(path: str) -> Optional[ProductType]:
+        """WP-2 (F13): the contract is ProductType, not a raw string."""
         upper = os.path.basename(path).upper()
-        for product in ("GCOV", "GSLC", "RSLC"):
+        for product in ("GCOV", "GSLC", "RSLC", "GUNW"):
             if product in upper:
-                return product
+                return ProductType(product)
         return None
 
     def read_window(self, handle: ProductHandle, layer_name: str,
