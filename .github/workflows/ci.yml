@@ -1,4 +1,4 @@
-﻿# WP-12: minimal CI — unit tests on 3.10/3.11/3.12, hygiene lint, version check.
+# WP-12: minimal CI — unit tests on 3.10/3.11/3.12, hygiene lint, version check.
 # (QGIS-container smoke tests are planned separately, see WP-11.)
 name: ci
 
@@ -18,8 +18,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+      # requests: download manager iteration tests (HTTP server)
+      # rasterio: GeoTIFF write fallback used by windthrow e2e
       - name: Install test dependencies
         run: python -m pip install --upgrade pip pytest h5py numpy
+          requests rasterio
       - name: Unit tests (nisar_core, no QGIS needed)
         run: python -m pytest tests/unit -v
       - name: Relative-import sanity check
@@ -44,6 +47,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Install dependencies
+        run: python -m pip install --upgrade pip pytest
       - name: metadata.txt <-> __init__.py <-> build script
         run: |-
           python -m pytest tests/unit/test_version_consistency.py -v

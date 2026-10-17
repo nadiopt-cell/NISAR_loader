@@ -131,3 +131,20 @@
   max_concurrent=2; estimate/free-space; UA/EDL-заголовки; timeout/verify_ssl/
   proxies доходят до requests; строгий get_local_path. Suite: 205 passed,
   1 skipped; ruff F чисто.
+
+## Post-release CI failures (17.10.2026)
+
+First `ci` runs on the WP series (cdb9c30 / merge 2d8c686) failed:
+
+1. `tests` (3.10-3.12): `test_download_manager.py` failed with
+   `DownloadError('requests is not available ...')` - the CI install
+   line had no `requests`. Fix: requests added to the install step.
+2. `test_run_windthrow_did_e2e`: `dcoh.tif` never appeared because
+   neither GDAL nor rasterio is present in CI, so `write_raster`
+   failed softly into `warnings` while the run stayed `success=True`.
+   Locally it passes because the dev py-3.11 has rasterio. Fix:
+   rasterio added to the CI install (GeoTIFF write fallback this
+   e2e relies on).
+3. `version` job: `No module named pytest` - the job ran the version
+   consistency test without installing anything. Fix: install step
+   with pytest added.
