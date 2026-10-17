@@ -89,6 +89,12 @@ def frequency_from_subdataset(subds_name: str) -> str:
     return ""
 
 
+def frequency_letter(freq_label: str):
+    """'frequencyA' -> 'A'; anything else -> None (WP-1)."""
+    from ..models import frequency_letter_from_label
+    return frequency_letter_from_label(freq_label)
+
+
 def extract_layers_from_dataset(ds, handle_cache: Dict[str, Any],
                                 ) -> List[Any]:
     """Build LayerInfo list from a GDAL dataset (subdatasets or bands).
@@ -113,6 +119,15 @@ def extract_layers_from_dataset(ds, handle_cache: Dict[str, Any],
         freq = frequency_from_subdataset(subds_name)
         band = subds.GetRasterBand(1)
 
+        # WP-1: per-layer georef when GDAL can derive it for this
+        # subdataset (NISAR driver >= 3.13); keeps frequencyB exports
+        # from inheriting the frequencyA footprint.
+        subds_georef = None
+        try:
+            subds_georef = georef_from_dataset(subds)
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.debug("subdataset georef failed for %s: %s", subds_name, exc)
+
         md = dict(band.GetMetadata() or {})
         units = "unknown"
         for key in ("units", "unit", "UNITS", "UNIT"):
@@ -134,6 +149,8 @@ def extract_layers_from_dataset(ds, handle_cache: Dict[str, Any],
             dtype=_GDAL_DTYPES.get(band.DataType, str(band.DataType)),
             no_data_value=None if nodata is None else float(nodata),
             metadata={"frequency": freq},
+            frequency=frequency_letter(freq),
+            georef=subds_georef,
         ))
 
     if not subdatasets and ds.RasterCount > 0:
@@ -207,13 +224,8 @@ def read_window_cached(handle, layer_name: str,
 
     cache = getattr(handle, "_subds_cache", None) or {}
 
-    target = None
-    for layer in handle.layers:
-        if layer.name == layer_name or layer.path.endswith(layer_name):
-            target = layer
-            break
-    if target is None:
-        raise ValueError("Layer %r not found" % layer_name)
+    from ..models import resolve_layer
+    target = resolve_layer(handle, layer_name)
 
     ds = cache.get(target.path)
     if ds is None:

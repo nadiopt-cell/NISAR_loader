@@ -129,6 +129,7 @@ I18N_RU = {
     "ui.open.col_pol": "Поляризация",
     "ui.open.col_units": "Единицы",
     "ui.open.col_size": "Размер (пикс.)",
+    "ui.open.col_freq": "Частота",
     "ui.open.add_selected": "Добавить выбранные слои в проект",
     "ui.open.no_file": "Сначала выберите файл NISAR (.h5).",
     "ui.open.open_failed": "Не удалось открыть продукт: {error}",
@@ -137,6 +138,7 @@ I18N_RU = {
         "Слои НЕ размещены на карте. Проверьте файл или обновите QGIS/GDAL."),
     "ui.open.beta_hint": "Статус продукта: {status}",
     "ui.open.added": "Добавлено слоёв: {n} (группа «{group}»).",
+    "ui.open.added_collision": "Слой {path} уже запланирован — пропуск.",
 
     # Processing tab
     "ui.process.title": "Пресеты для растительности",
@@ -149,6 +151,7 @@ I18N_RU = {
     "ui.process.done": "Вычислено {preset}: {path}",
     "ui.process.failed": "Ошибка обработки: {error}",
     "ui.process.requires": "Требуется: {req}",
+    "ui.process.frequency": "Частота решётки",
 
     # Export tab
     "ui.export.title": "Экспорт",

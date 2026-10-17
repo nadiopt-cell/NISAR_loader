@@ -1,8 +1,11 @@
 # -*- coding: utf-8 -*-
 """Unit tests for core data models."""
+import pytest
+
 from nisar_qgis.nisar_core.models import (
     DataStatus, ProductType, ProductLevel, Instrument, Polarization,
     LayerInfo, GeorefInfo, ProductHandle, SceneRecord, SearchParameters,
+    LayerNotFoundError,
 )
 from datetime import datetime
 
@@ -50,7 +53,13 @@ def test_handle_layer_helpers():
     ]
     assert handle.get_layer("HVHV").name == "HVHV"
     assert handle.get_layer("/frequencyA/HHHH").name == "HHHH"
-    assert handle.get_layer("nope") is None
+    assert handle.get_layer("frequencyA/HHHH").layer_id == "frequencyA/HHHH"
+    # WP-1: missing keys raise instead of silently returning None (F14)
+    with pytest.raises(LayerNotFoundError):
+        handle.get_layer("nope")
+    # partial names must NOT match longer layer names (F14)
+    with pytest.raises(LayerNotFoundError):
+        handle.get_layer("HH")
     assert handle.available_polarizations() == {Polarization.HHHH,
                                                 Polarization.HVHV}
     assert len(handle.layers_with_polarization(Polarization.HVHV)) == 1

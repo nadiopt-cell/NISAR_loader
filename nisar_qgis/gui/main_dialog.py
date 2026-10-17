@@ -31,7 +31,9 @@ from qgis.gui import QgsRubberBand
 from ..config_manager import config_manager, config_as_dict
 from ..i18n import tr, set_language
 from ..nisar_core.config import ReaderBackend, AccessBackend
-from ..nisar_core.models import ProductType, DataStatus
+from ..nisar_core.models import (
+    DataStatus, ProductType, output_name_with_frequency,
+)
 from ..nisar_core.readers import ReaderRegistry
 from ..nisar_core.presets import get_preset, list_presets
 from ..nisar_core.access.preview import scene_summary_pairs
@@ -288,7 +290,7 @@ class NisarMainDialog(QDialog):
         self.open_status.setWordWrap(True)
         form.addRow(self.open_status)
 
-        self.layers_table = QTableWidget(0, 5)
+        self.layers_table = QTableWidget(0, 6)
         self.layers_table.setSelectionBehavior(QTableWidget.SelectRows)
         self.layers_table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.layers_table.horizontalHeader().setSectionResizeMode(
@@ -331,6 +333,19 @@ class NisarMainDialog(QDialog):
         self.detail_view = QTextBrowser()
         self.detail_view.setOpenExternalLinks(False)
         detail_layout.addWidget(self.detail_view)
+
+        # WP-1: when a product has two frequency grids, the user picks
+        # which one the preset uses (never mixed automatically).
+        freq_row = QHBoxLayout()
+        self.freq_label = QLabel()
+        self._bind(self.freq_label, "ui.process.frequency", "text")
+        self.freq_combo = QComboBox()
+        freq_row.addWidget(self.freq_label)
+        freq_row.addWidget(self.freq_combo)
+        freq_row.addStretch(1)
+        self.freq_label.setVisible(False)
+        self.freq_combo.setVisible(False)
+        detail_layout.addLayout(freq_row)
 
         self.run_process_btn = QPushButton()
         self._bind(self.run_process_btn, "ui.process.run", "text")
@@ -750,7 +765,7 @@ class NisarMainDialog(QDialog):
         self.layers_table.setHorizontalHeaderLabels([
             tr("ui.open.col_layer"), tr("ui.open.col_pol"),
             tr("ui.open.col_units"), tr("ui.open.col_size"),
-            tr("ui.search.col_select")])
+            tr("ui.open.col_freq"), tr("ui.search.col_select")])
         self.preset_table.setHorizontalHeaderLabels([
             tr("ui.process.col_preset"), tr("ui.process.col_available")])
 
@@ -1230,17 +1245,22 @@ class NisarMainDialog(QDialog):
         handle = self._handle
         self.layers_table.setRowCount(0)
         self._layer_checkboxes = {}
+        self._layer_rows = {}
         if not handle:
             return
         for layer in handle.layers:
             row = self.layers_table.rowCount()
             self.layers_table.insertRow(row)
+            self._layer_rows[row] = layer
             self.layers_table.setItem(row, 0, QTableWidgetItem(layer.name))
             self.layers_table.setItem(row, 1, QTableWidgetItem(
                 layer.polarization.value if layer.polarization else "—"))
             self.layers_table.setItem(row, 2, QTableWidgetItem(layer.units))
             self.layers_table.setItem(row, 3, QTableWidgetItem(
                 "%d×%d" % (layer.shape[0], layer.shape[1])))
+            freq_label = ("frequency%s" % layer.frequency
+                          if layer.frequency else "")
+            self.layers_table.setItem(row, 4, QTableWidgetItem(freq_label))
             chk = QCheckBox()
             # Real covariance layers are pre-checked (TZ P2.4: selected
             # layers, not "everything").
@@ -1252,7 +1272,7 @@ class NisarMainDialog(QDialog):
             chk_layout.addWidget(chk)
             chk_layout.setAlignment(Qt.AlignCenter)
             chk_layout.setContentsMargins(0, 0, 0, 0)
-            self.layers_table.setCellWidget(row, 4, chk_widget)
+            self.layers_table.setCellWidget(row, 5, chk_widget)
             self._layer_checkboxes[row] = chk
         self.add_layers_btn.setEnabled(bool(handle.layers))
 
@@ -1266,12 +1286,11 @@ class NisarMainDialog(QDialog):
                                     tr("ui.open.no_file"))
             return
         selected = []
-        for row, chk in self._layer_checkboxes.items():
+        for row, chk in sorted(self._layer_checkboxes.items()):
             if chk.isChecked():
-                name = self.layers_table.item(row, 0).text()
-                layer = handle.get_layer(name)
-                if layer:
-                    selected.append(layer.name)
+                layer = self._layer_rows.get(row)
+                if layer is not None:
+                    selected.append(layer)
         if not selected:
             QMessageBox.information(self, tr("ui.info"),
                                     tr("ui.download.no_scenes"))
@@ -1283,11 +1302,25 @@ class NisarMainDialog(QDialog):
         base = re.sub(r"[^A-Za-z0-9_.-]", "_", base)[:60]
 
         self.add_layers_btn.setEnabled(False)
-        for name in selected:
-            out_path = cache_dir / ("%s_%s.tif" % (base, name))
-            task = NisarExportTask(handle, name, out_path,
+        # WP-1: outputs are keyed by layer_id and include the frequency
+        # tag, so two grids of the same file never collide on one file.
+        scheduled = {}
+        for layer in selected:
+            key = layer.layer_id or layer.name
+            out_path = cache_dir / output_name_with_frequency(
+                base, layer.name, layer.frequency)
+            if out_path in scheduled:
+                QMessageBox.warning(
+                    self, tr("ui.warning"),
+                    tr("ui.open.added_collision").format(
+                        path=out_path.name))
+                continue
+            scheduled[out_path] = key
+            display = "%s [%s]" % (layer.name, "frequency%s" % layer.frequency) \
+                if layer.frequency else layer.name
+            task = NisarExportTask(handle, key, out_path,
                                    config_as_dict(self.config), cog=False)
-            task.setProperty("layer_name", name)
+            task.setProperty("layer_name", display)
             task.setProperty("group_base", base)
             task.signals.finished_ok.connect(
                 lambda result, t=task: self._on_layer_exported(t, result))
@@ -1351,6 +1384,16 @@ class NisarMainDialog(QDialog):
     def _populate_preset_table(self):
         handle = self._handle
         self.preset_table.setRowCount(0)
+        # WP-1: frequency choice for multi-grid products.
+        freqs = handle.frequencies() if handle else []
+        self.freq_combo.clear()
+        if len(freqs) > 1:
+            for f in freqs:
+                self.freq_combo.addItem("frequency%s" % f, f)
+        elif freqs:
+            self.freq_combo.addItem("frequency%s" % freqs[0], freqs[0])
+        self.freq_combo.setVisible(len(freqs) > 1)
+        self.freq_label.setVisible(len(freqs) > 1)
         for preset in list_presets():
             row = self.preset_table.rowCount()
             self.preset_table.insertRow(row)
@@ -1430,12 +1473,19 @@ class NisarMainDialog(QDialog):
         base = re.sub(r"[^A-Za-z0-9_.-]", "_",
                       os.path.splitext(os.path.basename(
                           self._handle.source_path))[0])[:50]
-        out_path = cache_dir / ("%s_%s.tif" % (base, preset_id))
+        # WP-1: user-selected grid frequency (None = auto pick core-side).
+        # WP-1: user-selected grid frequency (None = auto pick core-side).
+        frequency = self.freq_combo.currentData() \
+            if self.freq_combo.isVisible() else None
+        freq_tag = (frequency or (self._handle.frequencies()[-1]
+                                  if self._handle.frequencies() else ""))
+        out_path = cache_dir / output_name_with_frequency(
+            base, preset_id, freq_tag)
+        config = dict(config_as_dict(self.config), frequency=frequency)
 
         self.run_process_btn.setEnabled(False)
         self.run_process_btn.setText(tr("ui.process.running"))
-        task = NisarComputeTask(self._handle, preset_id, out_path,
-                                config_as_dict(self.config))
+        task = NisarComputeTask(self._handle, preset_id, out_path, config)
         task.setProperty("preset_id", preset_id)
         task.signals.finished_ok.connect(
             lambda result, t=task: self._on_process_done(t, result))
@@ -1488,7 +1538,11 @@ class NisarMainDialog(QDialog):
             self.do_export_btn.setEnabled(False)
             return
         for layer in self._handle.layers:
-            self.export_layer_combo.addItem(layer.name)
+            display = "%s [%s]" % (layer.name,
+                                   "frequency%s" % layer.frequency) \
+                if layer.frequency else layer.name
+            self.export_layer_combo.addItem(display,
+                                            layer.layer_id or layer.name)
         self.do_export_btn.setEnabled(bool(self._handle.layers))
 
     def _on_browse_export(self):
@@ -1504,9 +1558,10 @@ class NisarMainDialog(QDialog):
             QMessageBox.information(self, tr("ui.info"),
                                     tr("ui.export.no_product"))
             return
-        layer_name = self.export_layer_combo.currentText()
+        layer_key = self.export_layer_combo.currentData() \
+            or self.export_layer_combo.currentText()
         out_path = self.export_path.text().strip()
-        if not layer_name or not out_path:
+        if not layer_key or not out_path:
             QMessageBox.information(self, tr("ui.info"),
                                     tr("ui.export.no_product"))
             return
@@ -1515,7 +1570,7 @@ class NisarMainDialog(QDialog):
             self.export_path.setText(out_path)
 
         self.do_export_btn.setEnabled(False)
-        task = NisarExportTask(self._handle, layer_name, out_path,
+        task = NisarExportTask(self._handle, layer_key, out_path,
                                config_as_dict(self.config),
                                cog=self.export_cog.isChecked())
         task.signals.finished_ok.connect(self._on_export_done)

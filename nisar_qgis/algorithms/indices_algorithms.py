@@ -22,6 +22,8 @@ from ..nisar_core.processing.indices import (
     compute_index_to_raster, VegetationIndex,
 )
 from ..nisar_core.processing.export import ExportBackend
+from ..nisar_core.models import (
+    LayerNotFoundError, AmbiguousLayerError)
 from ..nisar_core.presets import get_preset
 from ..i18n import tr
 
@@ -266,12 +268,11 @@ class NisarExportAlgorithm(NisarAlgorithmBase):
         output = self.parameterAsOutputLayer(parameters, "OUTPUT", context)
         cog = self.parameterAsBoolean(parameters, "COG", context)
 
-        if not handle.get_layer(layer_name):
-            known = ", ".join(l.name for l in handle.layers[:20])
+        try:
+            layer = handle.get_layer(layer_name)
+        except (LayerNotFoundError, AmbiguousLayerError) as exc:
             ReaderRegistry.close(handle)
-            raise QgsProcessingException(
-                "Layer %r not found in the product. Available: %s"
-                % (layer_name, known))
+            raise QgsProcessingException(str(exc)) from exc
 
         exporter = ExportBackend(dict(_config_dict(), cog=cog))
         result = exporter.export_layer(

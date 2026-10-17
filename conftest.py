@@ -476,3 +476,101 @@ def gunw_damage_mask():
     m[GUNW_DAMAGE_ROWS[0]:GUNW_DAMAGE_ROWS[1],
       GUNW_DAMAGE_COLS[0]:GUNW_DAMAGE_COLS[1]] = True
     return m
+
+
+# ---------------------------------------------------------------------------
+# WP-1: dual-frequency synthetic GCOV (frequencyA + frequencyB tiles).
+# Used to verify layer identity (layer_id), per-frequency georef, and the
+# "indices never mix frequencies" rule.
+# ---------------------------------------------------------------------------
+
+DUAL_H, DUAL_W = 20, 30
+
+
+def make_synthetic_gcov_two_freq(path, freq_a_layers=("HHHH", "HVHV"),
+                   freq_b_layers=("VHVH", "VVVV")):
+    """Dual-frequency GCOV; *freq_b_layers* is ("VHVH","VVVV") by default.
+
+    frequencyA: *freq_a_layers* on a smaller 10x16 tile;
+    frequencyB: *freq_b_layers* on a 20x30 tile.
+    """
+    import h5py
+
+    with h5py.File(str(path), "w") as f:
+        ident = f.create_group("/science/LSAR/identification")
+        ident["granuleId"] = (
+            "NISAR_L2_PR_GCOV_031_134_D_052_4005_DHDH_A_"
+            "20260927T115535_20260927T115548_P05023_N_P_J_001")
+        ident["productType"] = "GCOV"
+        ident["productVersion"] = "1.0.11"
+        ident["productLevel"] = "L2"
+        ident["missionId"] = "NISAR"
+        ident["platformName"] = "NISAR"
+        ident["instrumentName"] = "L-SAR"
+        ident["radarBand"] = "L"
+        ident["lookDirection"] = "Right"
+        ident["orbitPassDirection"] = "Descending"
+        ident["zeroDopplerStartTime"] = "2026-09-27T11:55:35.000000000"
+        ident["absoluteOrbitNumber"] = np.uint32(6132)
+        ident["trackNumber"] = np.uint32(134)
+        ident["frameNumber"] = np.uint16(52)
+        ident["isGeocoded"] = "True"
+        ident["processingType"] = "Nominal"
+        ident["compositeReleaseId"] = "P05023"
+        ident["listOfFrequencies"] = np.array(["A", "B"], dtype="S1")
+
+        for freq, names, (fh, fw), (x0, y0, dx, dy), epsg in (
+                ("frequencyA", freq_a_layers, (10, 16),
+                 (400000.0, 5000000.0, 10.0, 10.0), 32633),
+                ("frequencyB", freq_b_layers, (DUAL_H, DUAL_W),
+                 (401000.0, 4999500.0, 20.0, -20.0), 32633)):
+            grid = f.create_group(
+                "/science/LSAR/GCOV/grids/%s" % freq)
+
+            def add_cov(name, data, _grid=grid):
+                ds = _grid.create_dataset(name, data=data, dtype="f4")
+                ds.attrs["units"] = "1"
+                ds.attrs["_FillValue"] = np.float32("nan")
+                return ds
+
+            for name in names:
+                base = np.linspace(0.02, 1.4, fh * fw, dtype=np.float64)
+                add_cov(name, (base ** 1.1).astype(np.float32)
+                        .reshape(fh, fw))
+
+            xs = x0 + dx * np.arange(fw, dtype=np.float64)
+            ys = y0 + np.abs(dy) * np.arange(fh, dtype=np.float64) * (
+                -1 if dy < 0 else 1)
+            grid.create_dataset("xCoordinates", data=xs)
+            grid.create_dataset("yCoordinates", data=ys)
+            grid.create_dataset("xCoordinateSpacing", data=np.float64(dx))
+            grid.create_dataset("yCoordinateSpacing", data=np.float64(dy))
+
+            proj = grid.create_dataset("projection", data=np.uint32(epsg))
+            proj.attrs["epsg_code"] = str(epsg)
+            wkt = WKT_UTM33N.replace("32633", str(epsg))
+            proj.attrs["spatial_ref"] = wkt
+    return str(path)
+
+
+@pytest.fixture(scope="session")
+def gcov_two_freq(tmp_path_factory):
+    """A: HHHH+HVHV; B: VHVH+VVVV (distinct pol sets per grid)."""
+    path = tmp_path_factory.mktemp("gcov2f") / "two_freq.h5"
+    return make_synthetic_gcov_two_freq(path)
+
+
+@pytest.fixture(scope="session")
+def gcov_two_freq_same_names(tmp_path_factory):
+    """A: HHHH+HVHV; B: HHHH+HVHV — ambiguous display names across grids."""
+    path = tmp_path_factory.mktemp("gcov2fsame") / "two_freq_same.h5"
+    return make_synthetic_gcov_two_freq(
+        path, freq_b_layers=("HHHH", "HVHV"))
+
+
+@pytest.fixture(scope="session")
+def gcov_mixed_freq(tmp_path_factory):
+    """Cross-pol only on A, co-pol only on B — indices must refuse."""
+    path = tmp_path_factory.mktemp("gcovmixed") / "mixed.h5"
+    return make_synthetic_gcov_two_freq(
+        path, freq_a_layers=("HVHV",), freq_b_layers=("HHHH",))

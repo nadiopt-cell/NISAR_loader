@@ -129,6 +129,7 @@ I18N_EN = {
     "ui.open.col_pol": "Polarization",
     "ui.open.col_units": "Units",
     "ui.open.col_size": "Size (px)",
+    "ui.open.col_freq": "Frequency",
     "ui.open.add_selected": "Add selected layers to project",
     "ui.open.no_file": "Select a NISAR .h5 file first.",
     "ui.open.open_failed": "Could not open the product: {error}",
@@ -138,6 +139,7 @@ I18N_EN = {
         "QGIS/GDAL."),
     "ui.open.beta_hint": "Product status: {status}",
     "ui.open.added": "Added {n} layer(s) to the project group '{group}'.",
+    "ui.open.added_collision": "Layer {path} is already scheduled - skipped.",
 
     # Processing tab
     "ui.process.title": "Vegetation presets",
@@ -150,6 +152,7 @@ I18N_EN = {
     "ui.process.done": "Computed {preset}: {path}",
     "ui.process.failed": "Processing failed: {error}",
     "ui.process.requires": "Requires: {req}",
+    "ui.process.frequency": "Grid frequency",
 
     # Export tab
     "ui.export.title": "Export",
