@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """Build the QGIS plugin ZIP with the version from metadata.txt in the name.
 
 WP-12: metadata.txt ``version=`` is the single source of truth; this script

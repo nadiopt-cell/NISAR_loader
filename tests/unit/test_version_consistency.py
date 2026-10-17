@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """WP-12: version consistency (metadata.txt <-> __init__.py <-> build script)."""
 import importlib.util
 import re
