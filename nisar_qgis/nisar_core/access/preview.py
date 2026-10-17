@@ -79,15 +79,18 @@ def pick_browse_urls(browse_list: Optional[List[str]]) -> Dict[str, Any]:
 
 def bbox_from_wkt(wkt: Optional[str]) -> Optional[Tuple[float, float,
                                                          float, float]]:
-    """Bounding box (minx, miny, maxx, maxy) of a POLYGON WKT, or None.
+    """Bounding box (minx, miny, maxx, maxy) of a POLYGON/MULTIPOLYGON
+    WKT, or None.
 
-    Pure string parsing — no GDAL/QGIS needed. Accepts upper/lowercase
-    keywords and extra whitespace.
+    Pure string parsing - no GDAL/QGIS needed. Accepts upper/lowercase
+    keywords and extra whitespace. For MULTIPOLYGON the bbox spans ALL
+    the parts (WP-4, finding F8): NISAR burst/edge frames may ship with
+    split footprints.
     """
     if not wkt:
         return None
     text = wkt.strip().upper()
-    if not text.startswith("POLYGON"):
+    if not text.startswith(("POLYGON", "MULTIPOLYGON")):
         return None
     nums = re.findall(r"(-?\d+\.?\d*(?:[eE][-+]?\d+)?)\s+"
                       r"(-?\d+\.?\d*(?:[eE][-+]?\d+)?)", wkt)

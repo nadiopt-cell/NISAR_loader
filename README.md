@@ -4,12 +4,12 @@
 в QGIS: мониторинг растительности (HV в дБ, cross-ratio, RVI), обнаружение
 ветровалов (DiD когерентности), экспорт в GeoTIFF/COG.
 
-**Статус:** experimental MVP (v0.3.1). Совместимость: QGIS 3.28 LTR+ и
-QGIS 4.x (только `qgis.PyQt`). **Валидирован на реальных гранулах в
+**Статус:** experimental MVP (v0.3.2). Совместимость: QGIS 3.28 LTR+ (`qgis.PyQt`). Совместимость с QGIS
+4.x/Qt6 заявлена в коде, но **не проверена** на реальном QGIS 4 (WP-11, NISAR_loader_review_and_TZ.md). **Валидирован на реальных гранулах в
 реальном QGIS 3.44** (qgis_process + GUI offscreen: GCOV → индексы;
 GUNW-пара → DiD-ветровалы с маской Hansen GFC — цифры совпадают с
 ре-прогоном P3.1; детали — `docs/product_notes.md` и
-`RELEASE_NOTES_v0.3.1.md`). Headless: плагин стартует через
+`RELEASE_NOTES_v0.3.2.md`). Headless: плагин стартует через
 `initProcessing()` и полностью работает из `qgis_process`.
 
 ## Возможности
@@ -31,7 +31,7 @@ GUNW-пара → DiD-ветровалы с маской Hansen GFC — цифр
 ## Установка
 
 1. QGIS → **Plugins → Manage and Install Plugins → Install from ZIP** →
-   выбрать `nisar_qgis_plugin_v0.3.1.zip`.
+   выбрать `nisar_qgis_plugin_v0.3.2.zip`.
 2. Появится тулбар «NISAR Vegetation» и пункт меню. Processing-алгоритмы —
    в Toolbox под группой «NISAR Vegetation».
 
@@ -91,6 +91,9 @@ machine urs.earthdata.nasa.gov
 # юнит-тесты ядра — без QGIS и без GDAL
 python -m pytest tests/unit -v
 
+# сборка установочного ZIP (версия из metadata.txt):
+python scripts_build_zip.py
+
 # статическая проверка относительных импортов
 python scripts_import_check.py
 ```
@@ -140,6 +143,10 @@ AGENTS.md              # исходное задание
 * Для локально открытых файлов статус BETA/PROVISIONAL неизвестен —
   в файле нет явного флага (см. product_notes.md).
 * QML-стили не поставляются; применяется программная растяжка 2–98%.
+
+## Лицензия
+
+GPL-2.0 or any later version — файл `LICENSE`.
 
 ## Замечания для мейнтейнера
 

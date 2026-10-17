@@ -12,9 +12,8 @@ Search API usage verified against the live ASF SearchAPI (2026-09-29):
 
 Authentication: ``~/.netrc`` (Earthdata Login) — no passwords here (TZ P0.6).
 """
-import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional, Dict, Any
 
@@ -25,7 +24,8 @@ except ImportError:  # pragma: no cover - optional dependency
     asf = None
     ASF_SEARCH_AVAILABLE = False
 
-from .base import BaseAccessBackend, AccessRegistry, DownloadProgress
+from .base import (BaseAccessBackend, AccessRegistry,
+                   DownloadProgress, SearchError)
 from .preview import pick_browse_urls
 from ..models import (
     SceneRecord, SearchParameters, DataStatus, ProductType, Instrument,
@@ -54,6 +54,39 @@ _POLARIZATION_CODES = {
     "HH": Polarization.HH, "HV": Polarization.HV,
     "VV": Polarization.VV, "VH": Polarization.VH,
 }
+
+
+def _aware_utc(value: datetime) -> datetime:
+    """Naive datetimes are treated as UTC; aware ones get converted."""
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+def asf_time_bounds(params: SearchParameters):
+    """(start, end) tz-aware UTC datetimes for the ASF time filter.
+
+    The END date is inclusive: searched until its last second
+    23:59:59 UTC (WP-4, finding F8) - a scene acquired on the final day
+    of the range must be found.
+    """
+    start = end = None
+    if params.start_date:
+        start = _aware_utc(params.start_date).replace(
+            hour=0, minute=0, second=0, microsecond=0)
+    if params.end_date:
+        end = _aware_utc(params.end_date)
+        if (end.hour, end.minute, end.second,
+                end.microsecond) == (0, 0, 0, 0):
+            end = end.replace(hour=23, minute=59, second=59)
+    return start, end
+
+
+def _prod_label(value) -> str:
+    """Readable label for a ProductType (or whatever was passed)."""
+    if value is None:
+        return "None"
+    return getattr(value, "value", str(value))
 
 
 def _status_from_collection(collection_name: str, url: str) -> DataStatus:
@@ -106,29 +139,49 @@ class B2ASFSearchBackend(BaseAccessBackend):
 
     # ---------------------------------------------------------------- search
     def search(self, params: SearchParameters) -> List[SceneRecord]:
-        """Search ASF for NISAR scenes (verified API usage)."""
+        """Search ASF for NISAR scenes (verified API usage).
+
+        Failures are never silent (WP-4, finding F8):
+
+        * a total failure (no result and every product type failed) is
+          re-raised as :class:`SearchError` with the collected texts;
+        * partial failures (one product type failed, others succeeded)
+          are collected in ``self.search_warnings`` for the GUI;
+        * a per-type result count exactly at the configured limit is
+          reported as a truncation warning;
+        * scenes without an acquisition time in the metadata get
+          ``acquisition_time=None`` plus a warning (never ``now()``).
+        """
         if not ASF_SEARCH_AVAILABLE:
-            raise RuntimeError("asf_search is not available (%s)" % self.DEPENDENCY_HINT)
+            raise SearchError(
+                "asf_search is not available (%s)" % self.DEPENDENCY_HINT)
+
+        self.search_warnings = []
+        limit = int(params.max_results
+                    or self.config.get("max_results", 100))
+        start_dt, end_dt = asf_time_bounds(params)
 
         results: List[SceneRecord] = []
+        errors: List[str] = []
         for prod_type in params.product_types:
             level = PROCESSING_LEVEL_MAP.get(prod_type)
             if not level:
-                logger.warning("No ASF processing level for %s", prod_type)
+                self.search_warnings.append(
+                    "no ASF processing level for %s - skipped"
+                    % _prod_label(prod_type))
                 continue
 
             opts = {
                 "dataset": "NISAR",
                 "processingLevel": level,
-                "maxResults": min(params.max_results or 100,
-                                  self.config.get("asf_search_page_size", 100)),
+                "maxResults": limit,
             }
             if params.aoi_wkt:
                 opts["intersectsWith"] = params.aoi_wkt
-            if params.start_date:
-                opts["start"] = params.start_date.strftime("%Y-%m-%dT%H:%M:%SZ")
-            if params.end_date:
-                opts["end"] = params.end_date.strftime("%Y-%m-%dT%H:%M:%SZ")
+            if start_dt:
+                opts["start"] = start_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+            if end_dt:
+                opts["end"] = end_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
 
             try:
                 logger.info("ASF search: %s", opts)
@@ -142,14 +195,29 @@ class B2ASFSearchBackend(BaseAccessBackend):
                 else:
                     search_results = asf.search(**opts)
             except Exception as exc:
-                logger.error("ASF search failed for %s: %s", level, exc)
-                continue
+                text = "ASF search failed for %s: %s" % (level, exc)
+                errors.append(text)
+                self.search_warnings.append(text)
+                continue  # partial failure: other types may still work
 
+            n_type = 0
             for item in search_results:
                 scene = self._item_to_scene_record(item, prod_type)
-                if scene and self._matches_filters(scene, params):
+                if scene is None:
+                    self.search_warnings.append(
+                        "an ASF result for %s could not be parsed and "
+                        "was skipped" % level)
+                elif self._matches_filters(scene, params):
                     results.append(scene)
+                    n_type += 1
+            if n_type >= limit:
+                self.search_warnings.append(
+                    "results truncated at the configured limit "
+                    "(%d results for %s) - increase the search limit "
+                    "to see more" % (n_type, level))
 
+        if not results and errors:
+            raise SearchError("; ".join(errors))
         return results
 
     def _item_to_scene_record(self, item: Any,
@@ -158,24 +226,48 @@ class B2ASFSearchBackend(BaseAccessBackend):
             props = item.properties
 
             acq_time_str = props.get("startTime") or props.get("stopTime")
-            try:
-                acq_time = datetime.fromisoformat(
-                    acq_time_str.replace("Z", "+00:00")) if acq_time_str \
-                    else datetime.now()
-            except ValueError:
-                acq_time = datetime.now()
+            acq_time = None
+            if acq_time_str:
+                try:
+                    acq_time = datetime.fromisoformat(
+                        acq_time_str.replace("Z", "+00:00"))
+                except ValueError:
+                    acq_time = None
+            if acq_time is None:
+                # WP-4: a missing acquisition time is reported, never
+                # substituted with datetime.now() (honest interface)
+                warnings = getattr(self, "search_warnings", None)
+                if warnings is not None:
+                    warnings.append(
+                        "%s: no acquisition time in the scene metadata"
+                        % (props.get("sceneName") or "scene"))
 
             # Footprint WKT (pure string handling, no GDAL dependency).
             footprint_wkt = ""
             try:
                 geo = item.geojson()
                 geometry = geo.get("geometry") if geo else None
-                if geometry and geometry.get("type") == "Polygon":
-                    rings = geometry.get("coordinates") or []
-                    if rings:
+                gtype = geometry.get("type") if geometry else ""
+                coords = (geometry.get("coordinates") or []) \
+                    if geometry else []
+                if gtype == "Polygon" and coords:
+                    pts = ", ".join("%.6f %.6f" % (x, y)
+                                    for x, y in coords[0])
+                    footprint_wkt = "POLYGON((%s))" % pts
+                elif geometry.get("type") == "MultiPolygon" and coords:
+                    # WP-4: split footprints (burst/edge frames) arrive as
+                    # MultiPolygon — keep every part in the WKT so the
+                    # bbox/AOI checks cover the full footprint.
+                    parts = []
+                    for poly in coords:
+                        if not poly:
+                            continue
                         pts = ", ".join("%.6f %.6f" % (x, y)
-                                        for x, y in rings[0])
-                        footprint_wkt = "POLYGON((%s))" % pts
+                                        for x, y in poly[0])
+                        parts.append("(%s)" % pts)
+                    if parts:
+                        footprint_wkt = "MULTIPOLYGON(%s)" % ", ".join(
+                            parts)
             except Exception as exc:
                 logger.debug("Footprint extraction failed: %s", exc)
 
@@ -298,53 +390,54 @@ class B2ASFSearchBackend(BaseAccessBackend):
 
     # -------------------------------------------------------------- download
     def download(self, scene: SceneRecord, output_dir: Path,
-                 progress_callback=None) -> Path:
-        """Download via asf_search (netrc auth) with progress callbacks."""
-        if not ASF_SEARCH_AVAILABLE:
-            raise RuntimeError("asf_search is not available (%s)" % self.DEPENDENCY_HINT)
+                 progress_callback=None, cancel_event=None) -> Path:
+        """Download via the WP-3 DownloadManager.
+
+        Range-parallel parts with resume, size verification and an
+        atomic final rename. Auth: ``~/.netrc`` (handled by requests)
+        or a Bearer token from the config / ``EDL_TOKEN`` env - no
+        tokens or file paths are ever stored in the code.
+        """
+        from .download_manager import (
+            DownloadError, DownloadManager, REQUESTS_AVAILABLE,
+        )
+        if not REQUESTS_AVAILABLE:
+            raise RuntimeError("requests is not available (pip install "
+                               "requests)")
 
         url = scene.urls.get("download")
         if not url:
             raise ValueError("No download URL for scene %s" % scene.scene_id)
+        if not str(url).lower().startswith(("http://", "https://")):
+            raise DownloadError(
+                "B2 can only download http(s) URLs (got %r); use the "
+                "S3/streaming backend for other schemes" % str(url)[:40])
 
         output_dir = Path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
-        filename = url.rstrip("/").split("/")[-1]
-        output_path = output_dir / filename
+        filename = str(url).rstrip("/").split("/")[-1]
 
-        def report(status, downloaded=0, total=None, error="", path=""):
+        def report(done, total, status, path):
             if progress_callback:
                 progress_callback(DownloadProgress(
                     scene_id=scene.scene_id,
-                    bytes_downloaded=downloaded,
-                    total_bytes=total if total is not None else scene.size_bytes,
+                    bytes_downloaded=done,
+                    total_bytes=total if total is not None
+                    else scene.size_bytes,
                     status=status,
-                    error_message=error,
                     file_path=path,
                 ))
 
+        manager = DownloadManager(self.config)
         try:
-            report("downloading", 0)
-            # asf_search's download_url streams via the session; auth is
-            # whatever the session carries (netrc / token / cookies).
-            asf.download_url(
-                url=url, path=str(output_dir), session=self.session,
-                filename=filename,
-            )
-            if not output_path.exists():
-                # File name from URL may differ — accept any new .h5.
-                candidates = sorted(output_dir.glob("*.h5"),
-                                     key=lambda p: p.stat().st_mtime,
-                                     reverse=True)
-                if candidates:
-                    output_path = candidates[0]
-            report("completed", scene.size_bytes, scene.size_bytes,
-                   path=str(output_path))
-            return output_path
+            path = manager.download_scene(
+                url, output_dir, filename=filename,
+                expected_size=scene.size_bytes or 0,
+                cancel_event=cancel_event,
+                progress_cb=report,
+                scene_id=scene.scene_id)
         except Exception as exc:
-            report("failed", 0, scene.size_bytes, error=str(exc))
-            # Hint about credentials only when the failure smells auth-ish;
-            # a kwarg/typo error must not send the user chasing .netrc.
+            report(0, scene.size_bytes, "failed", "")
             blob = str(exc).lower()
             authy = any(w in blob for w in (
                 "401", "403", "unauthorized", "forbidden", "login",
@@ -352,21 +445,40 @@ class B2ASFSearchBackend(BaseAccessBackend):
             hint = (" Hint: check your Earthdata credentials (~/.netrc "
                     "with machine urs.earthdata.nasa.gov, or a valid EDL "
                     "token)." if authy else "")
+            if isinstance(exc, RuntimeError):
+                raise
             raise RuntimeError(
-                "Download failed for %s: %s.%s" % (scene.scene_id, exc, hint))
+                "Download failed for %s: %s.%s"
+                % (scene.scene_id, exc, hint))
+        report(scene.size_bytes, scene.size_bytes, "completed", str(path))
+        return path
 
     def get_local_path(self, scene: SceneRecord) -> Optional[Path]:
+        """Local path of a previously downloaded scene, or None.
+
+        Strict (WP-3): the file counts as ready only when it exists
+        under the FINAL name (exact granule id, never a ``.part``/
+        ``.partial`` leftover) AND its size matches the known scene
+        size (when known). The old "newest ``*.h5``" fallback accepted
+        truncated files and is gone.
+        """
         download_dir = Path(self.config.get(
             "download_dir", str(Path.home() / "Downloads" / "NISAR")))
-        base = scene.scene_id
-        for candidate in (base, base + ".h5", base.replace(".h5", "")):
-            path = download_dir / candidate
-            if path.suffix == ".h5" and path.exists():
-                return path
-        # Fallback: any file starting with the scene id.
-        if download_dir.exists():
-            for path in download_dir.glob(base + "*.h5"):
-                return path
+        base = str(scene.scene_id)
+        names = [base] if base.endswith(".h5") else [base, base + ".h5"]
+        expected = int(getattr(scene, "size_bytes", 0) or 0)
+        for name in names:
+            path = download_dir / name
+            if path.suffix != ".h5" or not path.exists():
+                continue
+            if path.name.endswith((".part", ".partial")):
+                continue
+            have = path.stat().st_size
+            if have <= 0:
+                continue
+            if expected and have != expected:
+                continue    # truncated copy - never report as ready
+            return path
         return None
 
 

@@ -427,9 +427,6 @@ def resample_fraction(src: np.ndarray, src_xs: np.ndarray,
     if sx.size < 2 or sy.size < 2 or dx.size < 2 or dy.size < 2:
         raise ValueError("degenerate coordinate arrays")
 
-    # source pixel size (handles ascending/descending y)
-    sdx = abs(sx[1] - sx[0])
-    sdy = abs(sy[0] - sy[-1]) / max(sy.size - 1, 1)
     ddx = abs(dx[1] - dx[0])
     ddy = abs(dy[0] - dy[-1]) / max(dy.size - 1, 1)
 
@@ -678,6 +675,16 @@ def windthrow_metrics(dcoh: np.ndarray, ref_mask: np.ndarray,
 # ---------------------------------------------------------------------------
 # Full pipeline
 # ---------------------------------------------------------------------------
+def format_metric(value, pattern: str = "%.3f") -> str:
+    """Metric text for the report lines: None renders as 'n/a' (WP-5)."""
+    if value is None:
+        return "n/a"
+    try:
+        return pattern % value
+    except (TypeError, ValueError):
+        return str(value)
+
+
 def run_windthrow_did(storm_path: str, control_path: str,
                       output_dir=None,
                       config: Dict = None,
@@ -748,6 +755,7 @@ def run_windthrow_did(storm_path: str, control_path: str,
                     % (ref_mask.shape, dcoh.shape)))
         ref = np.asarray(ref_mask, dtype=bool) if ref_mask is not None \
             else None
+        ref_overlap = int((ref & valid).sum()) if ref is not None else None
         if forest_mask is not None and forest_mask.shape != dcoh.shape:
             return ProcessingResult(
                 success=False, error_message=(
@@ -766,16 +774,22 @@ def run_windthrow_did(storm_path: str, control_path: str,
                 "no forest mask supplied — detection is not restricted "
                 "to forest; background may include non-forest pixels")
 
-        if ref is not None:
+        if ref is not None and ref_overlap == 0:
+            warnings.append(
+                "reference polygons do not intersect the valid processing "
+                "grid (reference.overlap = 0) - metrics are skipped and "
+                "background covers the whole scene instead")
+        if ref is not None and ref_overlap > 0:
             spacing_m = abs(georef.transform[1])
-            radius_px = params.ring_radius_m / spacing_m \
-                if spacing_m else 125.0
+            radius_px = (params.ring_radius_m / spacing_m
+                         if spacing_m else 125.0)
             background = ring_background_mask(ref, radius_px) & valid
         else:
             background = valid.copy()
-            warnings.append(
-                "no reference polygons supplied — background covers the "
-                "whole valid scene (threshold is less local)")
+            if ref is None:
+                warnings.append(
+                    "no reference polygons supplied - background covers "
+                    "the whole valid scene (threshold is less local)")
         if forest is not None:
             background &= forest
         if other is not None:
@@ -796,7 +810,7 @@ def run_windthrow_did(storm_path: str, control_path: str,
         flags: List[str] = []
         metrics: Dict[str, Any] = {}
         forest_fraction = None
-        if ref is not None:
+        if ref_overlap:
             ref_valid = ref & valid
             if forest is not None:
                 forest_fraction = float(
@@ -830,6 +844,7 @@ def run_windthrow_did(storm_path: str, control_path: str,
             "grid": {"width": width, "height": height,
                      "crs": georef.crs_authid,
                      "pixel_size_m": abs(georef.transform[1])},
+            "reference": {"overlap": ref_overlap},
             "background": {
                 "n_pixels": int(background.sum()),
                 "median_dcoh": detection.median_bg,

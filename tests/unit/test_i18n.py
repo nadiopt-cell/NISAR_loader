@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 """Unit tests for i18n texts: parity RU/EN, hint lengths, coverage."""
-import pytest
 
 from nisar_qgis.nisar_core.presets import PRESETS
 

@@ -10,11 +10,9 @@ import pytest
 
 from nisar_qgis.nisar_core.readers import ReaderRegistry
 from nisar_qgis.nisar_core.readers.a3_h5py import A3H5PyReader
-from nisar_qgis.nisar_core.readers.product_layers import \
-    GCOV_REAL_COVARIANCE_TERMS
 from nisar_qgis.nisar_core.models import ProductType
 
-from conftest import H, W, X0, Y0, DX, DY, _arr_hhhh, _arr_hvhv, _arr_vvvv
+from conftest import H, W, X0, Y0, DX, DY, _arr_hhhh, _arr_hvhv
 
 
 @pytest.fixture

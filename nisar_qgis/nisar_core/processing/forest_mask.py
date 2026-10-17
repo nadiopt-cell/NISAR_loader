@@ -27,6 +27,7 @@ from typing import List, Optional, Tuple
 import numpy as np
 
 from ..models import GeorefInfo
+from ..geo import bbox_wgs84_from_georef
 from .windthrow import (
     hansen_forest_mask_year, resample_fraction, DEFAULT_FOREST_FRACTION,
 )
@@ -82,12 +83,24 @@ def hansen_layer_urls(layer: str, bbox_wgs84: Tuple[float, float, float, float],
             for suffix in hansen_tile_suffixes(bbox_wgs84)]
 
 
+def _tile_coverage_warning(failed_tiles, n_tiles: int) -> List[str]:
+    """Warn explicitly when some required GFC tiles could not be read."""
+    if not failed_tiles:
+        return []
+    ok = max(0, n_tiles - len(failed_tiles))
+    coverage = 100.0 * ok / max(1, n_tiles)
+    return ["Hansen GFC tiles failed to read: %s (%d of %d required "
+            "tiles succeeded; forest mask coverage %.0f%%)"
+            % (", ".join(failed_tiles), ok, n_tiles, coverage)]
+
+
 def forest_mask_for_grid(georef: GeorefInfo, year: int,
                          version: str = DEFAULT_GFC_VERSION,
                          forest_fraction: float = DEFAULT_FOREST_FRACTION,
                          exclude_loss_year: bool = False,
                          bbox_wgs84: Optional[Tuple[float, float, float, float]] = None,
                          local_dir: Optional[str] = None,
+                         strict: bool = False,
                          ) -> Tuple[Optional[np.ndarray], List[str]]:
     """Forest-on-year mask on the GUNW 80 m grid (best effort).
 
@@ -103,25 +116,43 @@ def forest_mask_for_grid(georef: GeorefInfo, year: int,
     """
     warnings: List[str] = []
     if bbox_wgs84 is None:
-        bbox_wgs84 = _approx_bbox_wgs84(georef)
+        bbox_wgs84 = bbox_wgs84_from_georef(georef)
     if bbox_wgs84 is None:
-        return None, ["cannot approximate the scene bbox in WGS84"]
+        message = ("cannot determine the scene bbox in WGS84 (no valid "
+                   "CRS and no boundingPolygon) - Hansen forest mask "
+                   "unavailable")
+        if strict:
+            raise RuntimeError(message)
+        return None, [message]
 
     try:
-        mask = _forest_fraction_rasterio(georef, year, bbox_wgs84, version,
-                                         local_dir, exclude_loss_year)
-        if mask is not None:
-            return (mask >= forest_fraction), warnings
+        mask, failed_tiles, n_tiles = _forest_fraction_rasterio(
+            georef, year, bbox_wgs84, version, local_dir, exclude_loss_year)
     except Exception as exc:
-        logger.debug("rasterio forest path failed: %s", exc)
+        mask, failed_tiles, n_tiles = None, [], 0
+        warnings.append("rasterio forest path failed (%s); falling back "
+                        "to the GDAL warp" % exc)
+    if mask is not None:
+        warnings.extend(_tile_coverage_warning(failed_tiles, n_tiles))
+        if failed_tiles and strict:
+            raise RuntimeError(
+                "Hansen GFC tiles failed to read (%s) - forest mask "
+                "coverage below 100%% (strict mode)"
+                % ", ".join(failed_tiles))
+        return (mask >= forest_fraction), warnings
 
+    treecover = lossyear = None
+    gdal_error = None
     try:
-        treecover, lossyear, src_transform, src_crs = \
-            _read_hansen_gdal(bbox_wgs84, georef, version, local_dir)
+        treecover, lossyear, src_transform, src_crs = (
+            _read_hansen_gdal(bbox_wgs84, georef, version, local_dir))
     except Exception as exc:
-        return None, ["Hansen GFC tiles unavailable: %s" % exc]
+        gdal_error = "Hansen GFC tiles unavailable: %s" % exc
     if treecover is None or lossyear is None:
-        return None, ["Hansen GFC tiles could not be read"]
+        message = gdal_error or "Hansen GFC tiles could not be read"
+        if strict:
+            raise RuntimeError(message)
+        return None, warnings + [message]
 
     forest30 = hansen_forest_mask_year(treecover, lossyear, year,
                                        exclude_loss_year=exclude_loss_year)
@@ -201,26 +232,14 @@ def bbox_from_bounding_polygon(wkt: str) -> Optional[Tuple[float, float,
 
 
 def _approx_bbox_wgs84(georef: GeorefInfo) -> Optional[Tuple[float, ...]]:
-    """Rough WGS84 bbox of a projected georef (good enough for tiles)."""
-    try:
-        minx, miny, maxx, maxy = georef.bbox
-        authid = (georef.crs_authid or "").upper()
-        if "4326" in authid:
-            return (minx, miny, maxx, maxy)
-        if "326" in authid or "327" in authid:  # UTM: zone from EPSG
-            zone = int(authid.split(":")[-1]) % 100
-            central = zone * 6 - 183
-            # ~111 km per degree; UTM x is relative to 500000
-            lon = central + (minx - 500000.0) / 111320.0 / max(
-                math.cos(math.radians((miny + maxy) / 2.0)), 0.2)
-            lon2 = central + (maxx - 500000.0) / 111320.0 / max(
-                math.cos(math.radians((miny + maxy) / 2.0)), 0.2)
-            lat = miny / 110540.0
-            lat2 = maxy / 110540.0
-            return (min(lon, lon2), lat, max(lon, lon2), lat2)
-    except Exception as exc:  # pragma: no cover - defensive
-        logger.debug("bbox approximation failed: %s", exc)
-    return None
+    """WGS84 bbox of a projected grid (WP-5/F9: REAL transform now).
+
+    Kept as an alias for backwards compatibility; the implementation
+    moved to :mod:`nisar_core.geo` (OSR when GDAL is present, pyproj when
+    present, then the analytic inverse UTM) - the old ``x / 111320``
+    scale hack was off by whole degrees away from the central meridian.
+    """
+    return bbox_wgs84_from_georef(georef)
 
 
 # ---------------------------------------------------------------------------
@@ -244,6 +263,10 @@ def _forest_fraction_rasterio(georef: GeorefInfo, year: int, bbox_wgs84,
     Per tile: read only the intersecting source window, build forest@Y
     with the pure-NumPy rule, then reproject (sum) forest pixels and a
     count raster onto the scene grid; num/den = forest fraction.
+
+    Returns (fraction | None, failed_tile_suffixes, n_tiles) so the
+    caller can warn with the exact coverage fraction (WP-5: a failed or
+    missing tile is never swallowed silently).
     """
     import rasterio
     from rasterio.warp import reproject, Resampling
@@ -258,8 +281,10 @@ def _forest_fraction_rasterio(georef: GeorefInfo, year: int, bbox_wgs84,
                                 abs(georef.transform[5]))
     dst_crs = georef.crs_wkt or georef.crs_authid
     used_any = False
+    failed_tiles: List[str] = []
 
-    for suffix in hansen_tile_suffixes(bbox_wgs84):
+    tiles = hansen_tile_suffixes(bbox_wgs84)
+    for suffix in tiles:
         tc_path = _tile_path("treecover2000", suffix, version, local_dir)
         ly_path = _tile_path("lossyear", suffix, version, local_dir)
         try:
@@ -281,6 +306,7 @@ def _forest_fraction_rasterio(georef: GeorefInfo, year: int, bbox_wgs84,
                 src_crs = tc_src.crs
         except Exception as exc:
             logger.debug("tile %s failed: %s", suffix, exc)
+            failed_tiles.append(suffix)
             continue
 
         forest30 = hansen_forest_mask_year(
@@ -320,15 +346,15 @@ def _forest_fraction_rasterio(georef: GeorefInfo, year: int, bbox_wgs84,
         used_any = True
 
     if not used_any:
-        return None
+        return None, failed_tiles, len(tiles)
     with np.errstate(divide="ignore", invalid="ignore"):
         fraction = num / np.where(den > 0, den, np.nan)
-    return np.nan_to_num(fraction, nan=0.0)
+    return (np.nan_to_num(fraction, nan=0.0), failed_tiles, len(tiles))
 
 
 def _read_hansen_gdal(bbox_wgs84, georef: GeorefInfo, version: str,
                       local_dir=None):
-    from osgeo import gdal, osr
+    from osgeo import gdal
     gdal.UseExceptions()
     target = _utm_30m_grid(georef)
 

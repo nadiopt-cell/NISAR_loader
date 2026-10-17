@@ -15,18 +15,15 @@ from qgis.PyQt.QtCore import QCoreApplication
 from qgis.core import (
     QgsProcessingAlgorithm, QgsProcessingParameterFile,
     QgsProcessingParameterRasterDestination,
-    QgsProcessingParameterVectorLayer,
     QgsProcessingParameterNumber, QgsProcessingParameterBoolean,
     QgsProcessingParameterString, QgsProcessingParameterFolderDestination,
     QgsProcessingParameterEnum,
-    QgsProcessingException, QgsRasterLayer, QgsProject,
-    QgsRasterMinMaxOrigin, QgsProcessingParameterFeatureSource,
+    QgsProcessingException, QgsRasterLayer, QgsRasterMinMaxOrigin, QgsProcessingParameterFeatureSource,
 )
 
 from ..nisar_core.processing.windthrow import (
-    run_windthrow_did, WindthrowParams,
+    run_windthrow_did, WindthrowParams, format_metric,
 )
-from ..i18n import tr
 
 
 def _config_dict():
@@ -94,6 +91,10 @@ class NisarWindthrowDidAlgorithm(QgsProcessingAlgorithm):
             "FOREST_MASK", self.tr(
                 "Restrict to Hansen GFC forest (online tiles)"),
             defaultValue=False))
+        self.addParameter(QgsProcessingParameterBoolean(
+            "STRICT_FOREST", self.tr(
+                "Strict forest-mask mode (fail when GFC tiles incomplete)"),
+            defaultValue=True))
         self.addParameter(QgsProcessingParameterEnum(
             "THRESHOLD_MODE", self.tr("Threshold rule"),
             options=[self.tr("median + a (reference plugin)"),
@@ -161,7 +162,13 @@ class NisarWindthrowDidAlgorithm(QgsProcessingAlgorithm):
 
         forest_mask = None
         if self.parameterAsBoolean(parameters, "FOREST_MASK", context):
-            forest_mask = self._build_forest_mask(storm, event_date, feedback)
+            strict_forest = self.parameterAsBoolean(
+                parameters, "STRICT_FOREST", context)
+            try:
+                forest_mask = self._build_forest_mask(
+                    storm, event_date, feedback, strict=strict_forest)
+            except RuntimeError as exc:
+                raise QgsProcessingException(str(exc))
             if forest_mask is None:
                 feedback.pushWarning(
                     "Hansen GFC forest mask unavailable (offline?) — "
@@ -202,10 +209,11 @@ class NisarWindthrowDidAlgorithm(QgsProcessingAlgorithm):
         metrics = report.get("metrics") or {}
         if metrics:
             feedback.pushInfo(
-                "AUC=%.3f excess=%.3f TPR@FPR5%%=%.3f (n_ref=%s, n_bg=%s)"
-                % (metrics.get("auc"), metrics.get("excess"),
-                   metrics.get("tpr_fpr05"), metrics.get("n_ref"),
-                   metrics.get("n_bg")))
+                "AUC=%s excess=%s TPR@FPR5%%=%s (n_ref=%s, n_bg=%s)"
+                % (format_metric(metrics.get("auc")),
+                   format_metric(metrics.get("excess")),
+                   format_metric(metrics.get("tpr_fpr05")),
+                   metrics.get("n_ref"), metrics.get("n_bg")))
         det = report.get("detection") or {}
         feedback.pushInfo(
             "Detected %s px (~%s ha) in %s objects; threshold=%.4f"
@@ -231,10 +239,26 @@ class NisarWindthrowDidAlgorithm(QgsProcessingAlgorithm):
                 "REPORT": str(report)}
 
     # ----------------------------------------------------------------helpers
+    @staticmethod
+    def _transform_context(context):
+        """TransformContext for the GPKG writer / coordinate transform."""
+        try:
+            from qgis.core import QgsProject
+            return QgsProject.instance().transformContext()
+        except Exception:
+            try:
+                return context.transformContext()
+            except Exception:
+                return None
+
     def _rasterize_reference(self, source, storm_path, context, feedback):
         """Rasterize reference polygons onto the 80 m GUNW grid (bool).
 
         Uses a temporary GPKG + GDAL Rasterize with allTouched=True.
+        Features are reprojected from the source CRS into the RASTER CRS
+        while writing the temporary GPKG: GDAL Rasterize does not
+        reproject (WP-5, finding F3) - an EPSG:4326 polygon layer against
+        a projected GUNW grid used to produce an empty/shifted mask.
         Returns None when anything in the chain is unavailable.
         """
         try:
@@ -245,10 +269,22 @@ class NisarWindthrowDidAlgorithm(QgsProcessingAlgorithm):
         try:
             from qgis.core import (
                 QgsVectorFileWriter, QgsProcessingUtils,
-                QgsCoordinateReferenceSystem, QgsFields, QgsField,
-                QgsWkbTypes,
+                QgsCoordinateTransform, QgsCoordinateReferenceSystem,
+                QgsFields, QgsField, QgsWkbTypes, QgsFeature,
             )
-            from qgis.PyQt.QtCore import QVariant
+            # integer field type across Qt5/Qt6 (WP-5, finding F13):
+            # the deprecated QVariant.Int gives way to QMetaType.Type.Int
+            int_type = None
+            try:
+                from qgis.PyQt.QtCore import QMetaType
+                int_type = getattr(QMetaType, "Int", None)
+                if int_type is None:
+                    int_type = QMetaType.Type.Int
+            except Exception:
+                int_type = None
+            if int_type is None:
+                from qgis.PyQt.QtCore import QVariant
+                int_type = QVariant.Int
         except Exception:
             return None
 
@@ -260,32 +296,84 @@ class NisarWindthrowDidAlgorithm(QgsProcessingAlgorithm):
             if georef is None or not georef.is_valid:
                 return None
 
+            # the RASTER's CRS (WP-5): WKT wins, authid fallback; guess no
+            raster_crs = QgsCoordinateReferenceSystem()
+            if georef.crs_wkt:
+                raster_crs = QgsCoordinateReferenceSystem.fromOgcWkt(
+                    georef.crs_wkt)
+            if not raster_crs.isValid() and georef.crs_authid:
+                raster_crs = QgsCoordinateReferenceSystem(georef.crs_authid)
+            if not raster_crs.isValid():
+                feedback.pushWarning(
+                    "reference rasterization: the GUNW grid CRS is not "
+                    "resolvable - metrics skipped")
+                return None
+
+            transform_context = self._transform_context(context)
+            if transform_context is None:
+                feedback.pushWarning(
+                    "reference rasterization: no coordinate transform "
+                    "context available - metrics skipped")
+                return None
+
             gpkg = QgsProcessingUtils.generateTempFilename("ref_polygons.gpkg")
             fields = QgsFields()
-            fields.append(QgsField("id", QVariant.Int))
-            writer = QgsVectorFileWriter(
-                gpkg, "utf-8", fields,
-                QgsWkbTypes.Polygon,
-                QgsCoordinateReferenceSystem(source.sourceCrs()))
-            if writer.hasError():
+            fields.append(QgsField("id", int_type))
+            options = QgsVectorFileWriter.SaveVectorOptions()
+            options.driverName = "GPKG"
+            options.fileEncoding = "utf-8"
+            writer = QgsVectorFileWriter.create(
+                gpkg, fields, QgsWkbTypes.Polygon, raster_crs,
+                transform_context, options)
+            if writer is None:
+                feedback.pushWarning(
+                    "reference rasterization: temporary GPKG could not "
+                    "be created")
                 return None
-            from qgis.core import QgsFeature
+            if writer.hasError():
+                try:
+                    err = writer.errorMessage()
+                except Exception:
+                    err = "unknown writer error"
+                feedback.pushWarning(
+                    "reference rasterization: temporary GPKG could not "
+                    "be created (%s)" % err)
+                return None
+
+            # reproject geometries into the raster CRS before writing
+            src_crs = source.sourceCrs()
+            transform = None
+            if not src_crs.isValid():
+                feedback.pushWarning(
+                    "reference rasterization: source CRS is unknown - "
+                    "assuming it matches the raster CRS")
+            elif src_crs != raster_crs:
+                try:
+                    transform = QgsCoordinateTransform(
+                        src_crs, raster_crs, transform_context)
+                except Exception:
+                    transform = None
+
+            skipped = 0
             for i, feature in enumerate(source.getFeatures()):
                 geom = feature.geometry()
                 if geom is None or geom.isEmpty():
                     continue
-                if geom.isMultipart():
-                    for part in geom.asGeometryCollection() or []:
-                        f = QgsFeature(fields)
-                        f.setGeometry(part)
-                        f.setAttribute("id", i)
-                        writer.addFeature(f)
-                else:
-                    out = QgsFeature(fields)
-                    out.setGeometry(geom)
-                    out.setAttribute("id", i)
-                    writer.addFeature(out)
+                if transform is not None:
+                    try:
+                        geom.transform(transform)
+                    except Exception:
+                        skipped += 1
+                        continue
+                out = QgsFeature(fields)
+                out.setGeometry(geom)
+                out.setAttribute("id", i)
+                writer.addFeature(out)
             del writer
+            if skipped:
+                feedback.pushWarning(
+                    "reference rasterization: %d polygon(s) dropped "
+                    "(cannot be reprojected into the raster CRS)" % skipped)
 
             import tempfile
             import numpy as np
@@ -320,8 +408,14 @@ class NisarWindthrowDidAlgorithm(QgsProcessingAlgorithm):
             feedback.pushWarning("reference rasterization failed: %s" % exc)
             return None
 
-    def _build_forest_mask(self, storm_path, event_date, feedback):
-        """Hansen GFC forest mask on the GUNW grid (best effort)."""
+    def _build_forest_mask(self, storm_path, event_date, feedback,
+                           strict=False):
+        """Hansen GFC forest mask on the GUNW grid (best effort).
+
+        ``strict=True`` (the algorithm default) makes a < 100% tile
+        coverage or an unresolvable WGS84 bbox a hard error instead of
+        silently running without the forest mask (WP-5, finding F6).
+        """
         try:
             from ..nisar_core.readers import ReaderRegistry
             from ..nisar_core.processing.forest_mask import (
@@ -335,10 +429,13 @@ class NisarWindthrowDidAlgorithm(QgsProcessingAlgorithm):
             year = event_date.year if event_date else \
                 datetime.now().year
             mask, warns = forest_mask_for_grid(georef, year=year,
-                                               bbox_wgs84=bbox)
+                                               bbox_wgs84=bbox,
+                                               strict=strict)
             for w in warns:
                 feedback.pushWarning(w)
             return mask
+        except RuntimeError:
+            raise  # strict mode: fail loudly on missing forest coverage
         except Exception as exc:  # pragma: no cover - best effort
             feedback.pushWarning("forest mask failed: %s" % exc)
             return None

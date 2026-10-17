@@ -27,7 +27,8 @@ except ImportError:  # pragma: no cover - environment specific
 from .base import BaseReader, ReaderRegistry
 from . import product_layers as PL
 from ..models import (
-    ProductHandle, LayerInfo, GeorefInfo, DataStatus, ProductType, Instrument,
+    ProductHandle, LayerInfo, GeorefInfo, DataStatus, ProductType,
+    frequency_letter_from_label, resolve_layer,
 )
 
 logger = logging.getLogger("nisar.readers.a3")
@@ -92,18 +93,26 @@ class A3H5PyReader(BaseReader):
         h5 = h5py.File(path, "r")
         try:
             instrument, product = self._detect_product(h5)
+            georefs = self._extract_georefs(h5, instrument, product)
             layers = self._extract_layers(h5, instrument, product)
-            georef = self._extract_georef(h5, instrument, product)
+            # WP-1: every layer carries the georef of its own grid.
+            for layer in layers:
+                gref = georefs.get(layer.frequency)
+                if gref is not None:
+                    layer.georef = gref
+            primary = (georefs.get("A")
+                       or (next(iter(georefs.values())) if georefs else None))
             identification = self._extract_identification(h5, instrument)
             data_status = self._detect_data_status(identification)
             handle = ProductHandle(
                 source_path=path,
                 reader_backend=self.BACKEND_ID,
                 layers=layers,
-                georef=georef,
+                georef=primary,
                 metadata={
                     "identification": identification,
                     "data_status": data_status.value,
+                    "georef_by_frequency": dict(georefs),
                 },
                 product_type=self._to_product_type(product),
                 data_status=data_status,
@@ -178,6 +187,7 @@ class A3H5PyReader(BaseReader):
 
         height, width = (shape[0], shape[1]) if len(shape) >= 2 else (shape[0], 1)
 
+        freq_letter = frequency_letter_from_label(frequency)
         return LayerInfo(
             name=name,
             path=path,
@@ -188,36 +198,48 @@ class A3H5PyReader(BaseReader):
             dtype=str(dataset.dtype),
             no_data_value=nodata,
             metadata={"frequency": frequency},
+            frequency=freq_letter,
         )
 
     # ------------------------------------------------------------- georef
-    def _extract_georef(self, h5, instrument: str,
-                        product: str) -> Optional[GeorefInfo]:
-        """Build GeorefInfo from x/yCoordinates + projection dataset."""
+    # ------------------------------------------------------------- georef
+    def _extract_georefs(self, h5, instrument: str, product: str
+                         ) -> Dict[str, GeorefInfo]:
+        """GeorefInfo per frequency grid (WP-1): key = "A" / "B".
+
+        ``ProductHandle.georef`` stays the primary (frequencyA, else the
+        first available) grid for backward compatibility.
+        """
         base = "/science/%s/%s/grids" % (instrument, product)
-        warnings: List[str] = []
+        georefs: Dict[str, GeorefInfo] = {}
+        orphan_warnings: List[str] = []
 
         for freq in PL.FREQUENCY_GROUPS:
+            letter = frequency_letter_from_label(freq)
             group_path = "%s/%s" % (base, freq)
             if group_path not in h5:
                 continue
             group = h5[group_path]
+            warnings: List[str] = []
             if "xCoordinates" not in group or "yCoordinates" not in group:
                 warnings.append("%s: x/yCoordinates missing" % group_path)
+                if letter:
+                    orphan_warnings.extend(warnings)
                 continue
 
             xs = np.asarray(group["xCoordinates"][()], dtype=np.float64).ravel()
             ys = np.asarray(group["yCoordinates"][()], dtype=np.float64).ravel()
             if xs.size < 2 or ys.size < 2:
                 warnings.append("%s: degenerate coordinate arrays" % group_path)
+                if letter:
+                    orphan_warnings.extend(warnings)
                 continue
 
             width, height = int(xs.size), int(ys.size)
 
             # Spacing datasets may be SIGNED: real GCOV products store a
-            # negative yCoordinateSpacing for north-up grids (y descends) —
-            # verified on a real UR granule (-80 m). Use magnitudes here;
-            # orientation is derived from the coordinate arrays below.
+            # negative yCoordinateSpacing for north-up grids - use
+            # magnitudes; orientation comes from the coordinate arrays.
             dx_signed = (float(group["xCoordinateSpacing"][()])
                          if "xCoordinateSpacing" in group
                          else float(xs[1] - xs[0]))
@@ -227,10 +249,14 @@ class A3H5PyReader(BaseReader):
             dx, dy = abs(dx_signed), abs(dy_signed)
             if dx <= 0 or dy <= 0 or not np.isfinite(dx) or not np.isfinite(dy):
                 warnings.append("%s: non-positive pixel spacing" % group_path)
+                if letter:
+                    orphan_warnings.extend(warnings)
                 continue
             if xs[0] > xs[-1]:
                 warnings.append("%s: descending xCoordinates are not "
                                 "supported yet" % group_path)
+                if letter:
+                    orphan_warnings.extend(warnings)
                 continue
 
             # CF convention: coordinate variables are pixel centers.
@@ -243,32 +269,36 @@ class A3H5PyReader(BaseReader):
                              float(ys[0]) - dy / 2.0, 0.0, dy]
 
             crs_wkt, auth_id = self._read_projection(group)
-            group_warnings = [w for w in warnings
-                              if w.startswith(group_path)]
             if not auth_id:
-                group_warnings.append("CRS authority code not recognized")
+                warnings.append("CRS authority code not recognized")
+                if letter:
+                    orphan_warnings.extend(warnings)
 
             ulx, xres, _, uly, _, yres = transform
             lrx = ulx + width * xres
             lry = uly + height * yres
             bbox = (min(ulx, lrx), min(uly, lry), max(ulx, lrx), max(uly, lry))
 
-            return GeorefInfo(
-                crs_wkt=crs_wkt,
-                crs_authid=auth_id,
-                transform=transform,
-                width=width,
-                height=height,
-                bbox=bbox,
-                is_valid=bool(crs_wkt or auth_id) and not group_warnings,
-                warnings=group_warnings,
-            )
+            if letter:
+                georefs[letter] = GeorefInfo(
+                    crs_wkt=crs_wkt,
+                    crs_authid=auth_id,
+                    transform=transform,
+                    width=width,
+                    height=height,
+                    bbox=bbox,
+                    is_valid=bool(crs_wkt or auth_id) and not warnings,
+                    warnings=warnings,
+                )
 
-        return GeorefInfo(
-            crs_wkt="", crs_authid="",
-            transform=[0, 1, 0, 0, 0, -1], width=0, height=0,
-            bbox=(0, 0, 0, 0), is_valid=False,
-            warnings=warnings or ["No frequency grid group found"])
+        if not georefs:
+            georefs["-"] = GeorefInfo(
+                crs_wkt="", crs_authid="",
+                transform=[0, 1, 0, 0, 0, -1], width=0, height=0,
+                bbox=(0, 0, 0, 0), is_valid=False,
+                warnings=(orphan_warnings
+                          or ["No frequency grid group found"]))
+        return georefs
 
     def _read_projection(self, group) -> Tuple[str, str]:
         """Read WKT and EPSG authid from the ``projection`` dataset."""
@@ -302,6 +332,12 @@ class A3H5PyReader(BaseReader):
                 value = value[()]
             if isinstance(value, (bytes, np.bytes_, np.str_, str)):
                 result[key] = _as_text(value)
+            elif isinstance(value, np.ndarray):
+                # multi-value fields (listOfFrequencies, listOfPolarizations)
+                result[key] = [
+                    _as_text(v) if isinstance(v, (bytes, np.bytes_,
+                                                  np.str_, str)) else v
+                    for v in value]
             else:
                 result[key] = value.item() if hasattr(value, "item") else value
         return result
@@ -349,14 +385,7 @@ class A3H5PyReader(BaseReader):
             h5 = h5py.File(handle.source_path, "r")
             handle._h5_file = h5
 
-        layer = None
-        for candidate in handle.layers:
-            if candidate.name == layer_name or candidate.path.endswith(layer_name):
-                layer = candidate
-                break
-        if layer is None:
-            raise ValueError("Layer %r not found in %s" % (layer_name,
-                                                            handle.source_path))
+        layer = resolve_layer(handle, layer_name)
 
         dataset = h5.get(layer.path)
         if dataset is None:

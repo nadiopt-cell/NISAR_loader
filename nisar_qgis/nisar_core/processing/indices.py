@@ -14,11 +14,14 @@ docs/product_notes.md). dB products are computed as 10*log10(x).
 """
 import logging
 from dataclasses import dataclass
-from typing import Tuple, Optional, Dict, Any, List, Callable
+from typing import Tuple, Optional, Dict, Any, Callable, List
 
 import numpy as np
 
-from ..models import LayerInfo, Polarization, ProductHandle, ProcessingResult
+from ..models import (
+    LayerInfo, Polarization, ProductHandle, ProcessingResult,
+    resolve_layer, LayerNotFoundError,
+)
 from ..readers import ReaderRegistry
 
 logger = logging.getLogger("nisar.processing.indices")
@@ -69,20 +72,66 @@ CROSS_POL_LAYER_NAMES = ("HVHV", "VHVH")   # cross-pol diagonal terms
 CO_POL_LAYER_NAMES = ("HHHH", "VVVV")      # co-pol diagonal terms
 
 
-def _find_cross_pol_layer(backend, handle: ProductHandle):
-    for name in CROSS_POL_LAYER_NAMES:
-        layer = backend._find_layer(handle, name)
-        if layer is not None:
-            return layer
-    return None
+def pick_index_layers(handle: ProductHandle, index_id: str,
+                      preferred_frequency: Optional[str] = None
+                      ) -> Tuple[Dict[str, LayerInfo], Optional[str]]:
+    """Pick index inputs from ONE frequency grid (WP-1).
 
+    Vegetation indices must never mix frequencyA and frequencyB layers.
+    Returns ``(layers, frequency)``; *frequency* is "A"/"B" (None when the
+    product carries no frequency tags). Raises ValueError with an explicit
+    message when no single grid provides the needed polarizations.
+    """
+    def pol_value(layer):
+        pol = getattr(layer, "polarization", None)
+        return pol.value if pol is not None else None
 
-def _find_co_pol_layer(backend, handle: ProductHandle):
-    for name in CO_POL_LAYER_NAMES:
-        layer = backend._find_layer(handle, name)
-        if layer is not None:
-            return layer
-    return None
+    science = [l for l in handle.layers
+               if pol_value(l) in ("HVHV", "VHVH", "HHHH", "VVVV")]
+    by_freq: Dict[Optional[str], List[LayerInfo]] = {}
+    for layer in science:
+        by_freq.setdefault(layer.frequency, []).append(layer)
+
+    order: List[Optional[str]] = []
+    for f in (preferred_frequency, "A", "B", None):
+        if f in by_freq and f not in order:
+            order.append(f)
+
+    def first(cands, pol_name):
+        for layer in cands:
+            if pol_value(layer) == pol_name:
+                return layer
+        return None
+
+    for freq in order:
+        cands = by_freq[freq]
+        cross = (first(cands, "HVHV") or first(cands, "VHVH"))
+        co_h = first(cands, "HHHH")
+        co_v = first(cands, "VVVV")
+        if index_id == VegetationIndex.HV_DB:
+            if cross is not None:
+                return {"hv": cross}, freq
+        elif index_id == VegetationIndex.CROSS_RATIO:
+            co = co_h if co_h is not None else co_v
+            if cross is not None and co is not None:
+                return {"hv": cross, "hh": co}, freq
+        elif index_id == VegetationIndex.RVI:
+            co = co_h if co_h is not None else co_v
+            if cross is not None and co is not None:
+                picked = {"hv": cross, "hh": co}
+                if co_h is not None and co_v is not None:
+                    picked["vv"] = co_v
+                return picked, freq
+        else:
+            raise ValueError("Unknown index id %r" % index_id)
+
+    avail = "; ".join(
+        "%s: [%s]" % (("frequency%s" % f) if f else "no frequency tag",
+                      ", ".join(sorted({l.name for l in ls})))
+        for f, ls in by_freq.items())
+    raise ValueError(
+        "Index %r needs all its layers from a single frequency grid, "
+        "but no grid has them all. Available: %s" % (index_id, avail))
 
 
 class NumpyProcessingBackend:
@@ -111,32 +160,40 @@ class NumpyProcessingBackend:
         return available[0](self.config)
 
     def _find_layer(self, handle: ProductHandle, preferred_name: str,
-                    preferred_pol: Polarization = None) -> Optional[LayerInfo]:
-        for layer in handle.layers:
+                    preferred_pol: Polarization = None,
+                    frequency: Optional[str] = None) -> Optional[LayerInfo]:
+        # Exact name, then polarization, then whole last path segment.
+        # No substring guessing (WP-1 / F14).
+        candidates = [l for l in handle.layers
+                      if frequency is None or l.frequency == frequency]
+        for layer in candidates:
             if layer.name == preferred_name:
                 return layer
         if preferred_pol is not None:
-            for layer in handle.layers:
+            for layer in candidates:
                 if layer.polarization is preferred_pol:
                     return layer
-        for layer in handle.layers:
-            if preferred_name.lower() in layer.name.lower():
+        for layer in candidates:
+            if layer.path and \
+                    layer.path.rstrip("/").split("/")[-1] == preferred_name:
                 return layer
         return None
 
-    def _read_full_tiled(self, handle: ProductHandle, layer_name: str,
+    def _read_full_tiled(self, handle: ProductHandle, layer: LayerInfo,
                          reader) -> np.ndarray:
-        """Read a full layer tile by tile ((height, width) convention)."""
-        layer = self._find_layer(handle, layer_name)
-        if not layer:
-            raise ValueError("Layer %r not found" % layer_name)
+        """Read a full layer tile by tile ((height, width) convention).
+
+        Reads go through the unambiguous ``layer_id`` (WP-1), so dual-grid
+        products never resolve to the wrong frequency.
+        """
+        key = layer.layer_id or layer.name
         height, width = layer.shape[0], layer.shape[1]
         full_data = np.full((height, width), np.nan, dtype=np.float32)
         for y in range(0, height, self.tile_size):
             ysize = min(self.tile_size, height - y)
             for x in range(0, width, self.tile_size):
                 xsize = min(self.tile_size, width - x)
-                tile = reader.read_window(handle, layer.name, (x, y, xsize, ysize))
+                tile = reader.read_window(handle, key, (x, y, xsize, ysize))
                 if tile.ndim == 3:
                     tile = tile[0]
                 full_data[y:y + ysize, x:x + xsize] = tile
@@ -148,18 +205,20 @@ class NumpyProcessingBackend:
                       ) -> IndexResult:
         """Cross-pol backscatter in dB: 10*log10(HVHV or VHVH)."""
         reader = self._get_reader(handle)
-        # Explicit layer wins; otherwise any cross-pol diagonal term.
-        layer = (self._find_layer(handle, layer_name)
-                 or _find_cross_pol_layer(self, handle))
-        if not layer:
-            raise ValueError(
-                "No cross-polarization layer found (looked for HVHV / VHVH)")
+        # Explicit key wins (unique name/layer_id); otherwise the
+        # frequency-consistent cross-pol pick (WP-1).
+        try:
+            layer = resolve_layer(handle, layer_name)
+        except LayerNotFoundError:
+            picked, _freq = pick_index_layers(handle, VegetationIndex.HV_DB)
+            layer = picked["hv"]
 
         if window:
-            data = np.asarray(reader.read_window(handle, layer.name, window),
-                              dtype=np.float64)
+            data = np.asarray(
+                reader.read_window(handle, layer.layer_id or layer.name,
+                                   window), dtype=np.float64)
         else:
-            data = np.asarray(self._read_full_tiled(handle, layer.name, reader),
+            data = np.asarray(self._read_full_tiled(handle, layer, reader),
                               dtype=np.float64)
 
         db_data = _safe_log10(data).astype(np.float32)
@@ -181,29 +240,49 @@ class NumpyProcessingBackend:
                             ) -> IndexResult:
         """Cross/co-pol ratio in dB == cross_dB - co_dB."""
         reader = self._get_reader(handle)
-        cross = (self._find_layer(handle, hv_layer)
-                 or _find_cross_pol_layer(self, handle))
-        co = (self._find_layer(handle, hh_layer)
-              or _find_co_pol_layer(self, handle))
-        if not cross or not co:
+        try:
+            cross = resolve_layer(handle, hv_layer)
+        except LayerNotFoundError:
+            cross = None
+        if cross is not None:
+            try:
+                co = resolve_layer(handle, hh_layer)
+            except LayerNotFoundError:
+                co = None
+            if co is None:
+                picked, _freq = pick_index_layers(
+                    handle, VegetationIndex.CROSS_RATIO,
+                    preferred_frequency=cross.frequency)
+                co = picked["hh"]
+        else:
+            picked, _freq = pick_index_layers(
+                handle, VegetationIndex.CROSS_RATIO)
+            cross, co = picked["hv"], picked["hh"]
+        # WP-1: one frequency grid per index; shapes must match.
+        if (cross.frequency and co.frequency
+                and cross.frequency != co.frequency):
             raise ValueError(
-                "Cross-ratio requires a cross-pol (HVHV/VHVH) and a co-pol "
-                "(HHHH/VVVV) layer (got cross=%s, co=%s)"
-                % (bool(cross), bool(co)))
+                "Cross-ratio inputs come from different grids (%s vs %s); "
+                "indices never mix frequencyA and frequencyB layers"
+                % (cross.layer_id, co.layer_id))
+        if cross.shape != co.shape:
+            raise ValueError(
+                "Cross-ratio input shapes differ (%s vs %s)"
+                % (cross.layer_id, co.layer_id))
 
         if window:
             cross_data = np.asarray(
-                reader.read_window(handle, cross.name, window),
+                reader.read_window(handle, cross.layer_id or cross.name, window),
                 dtype=np.float64)
             co_data = np.asarray(
-                reader.read_window(handle, co.name, window),
+                reader.read_window(handle, co.layer_id or co.name, window),
                 dtype=np.float64)
         else:
             cross_data = np.asarray(
-                self._read_full_tiled(handle, cross.name, reader),
+                self._read_full_tiled(handle, cross, reader),
                 dtype=np.float64)
             co_data = np.asarray(
-                self._read_full_tiled(handle, co.name, reader),
+                self._read_full_tiled(handle, co, reader),
                 dtype=np.float64)
 
         ratio_db = (_safe_log10(cross_data)
@@ -226,20 +305,18 @@ class NumpyProcessingBackend:
                     ) -> IndexResult:
         """RVI; formula auto-selected from available polarizations."""
         reader = self._get_reader(handle)
-        cross = _find_cross_pol_layer(self, handle)
-        co_h = self._find_layer(handle, "HHHH")
-        co_v = self._find_layer(handle, "VVVV")
-
-        if not cross:
-            raise ValueError(
-                "RVI requires a cross-pol layer (HVHV or VHVH)")
-        full_pol = co_h is not None and co_v is not None
+        # WP-1: RVI inputs come from one frequency grid.
+        picked, _freq = pick_index_layers(handle, VegetationIndex.RVI)
+        cross = picked["hv"]
+        co_h, co_v = picked.get("hh"), picked.get("vv")
+        full_pol = co_v is not None
 
         def read(layer):
+            key = layer.layer_id or layer.name
             if window:
-                return np.asarray(reader.read_window(handle, layer.name, window),
+                return np.asarray(reader.read_window(handle, key, window),
                                   dtype=np.float64)
-            return np.asarray(self._read_full_tiled(handle, layer.name, reader),
+            return np.asarray(self._read_full_tiled(handle, layer, reader),
                               dtype=np.float64)
 
         cross_data = read(cross)
@@ -332,47 +409,31 @@ def compute_index_to_raster(handle: ProductHandle, index_id: str,
     backend = NumpyProcessingBackend(config)
     reader = backend._get_reader(handle)
 
-    georef = handle.georef
+    # WP-1: all index inputs come from ONE frequency grid; never mix A/B.
+    try:
+        layers, frequency = pick_index_layers(
+            handle, index_id,
+            preferred_frequency=config.get("frequency"))
+    except ValueError as exc:
+        return ProcessingResult(success=False, error_message=str(exc))
+
+    # Shape agreement inside the picked grid (defensive; lines usually
+    # share a grid per frequency).
+    shapes = {l.shape for l in layers.values()}
+    if len(shapes) > 1:
+        return ProcessingResult(
+            success=False,
+            error_message="%s: input layers have different shapes %s "
+                          "(they should share one grid)" % (index_id, shapes))
+
+    georef = handle.georef_for_frequency(frequency)
     if georef is None or not georef.is_valid:
         return ProcessingResult(
             success=False,
-            error_message=("Product has no valid georeference; refusing to "
-                           "write a geo-referenced raster from it"))
-
-    # Collect required layers per index (polarization-generic: cross-pol =
-    # HVHV or VHVH, co-pol = HHHH or VVVV — see real-granule note above).
-    layers: Dict[str, LayerInfo] = {}
-    if index_id == VegetationIndex.HV_DB:
-        layer = _find_cross_pol_layer(backend, handle)
-        if not layer:
-            return ProcessingResult(
-                success=False,
-                error_message="No cross-pol layer found (HVHV / VHVH)")
-        layers["hv"] = layer
-    elif index_id == VegetationIndex.CROSS_RATIO:
-        cross = _find_cross_pol_layer(backend, handle)
-        co = _find_co_pol_layer(backend, handle)
-        if not cross or not co:
-            return ProcessingResult(
-                success=False,
-                error_message="Cross-ratio requires a cross-pol "
-                              "(HVHV/VHVH) and a co-pol (HHHH/VVVV) layer")
-        layers["hv"], layers["hh"] = cross, co
-    elif index_id == VegetationIndex.RVI:
-        cross = _find_cross_pol_layer(backend, handle)
-        co_h = backend._find_layer(handle, "HHHH")
-        co_v = backend._find_layer(handle, "VVVV")
-        if not cross or not (co_h or co_v):
-            return ProcessingResult(
-                success=False,
-                error_message="RVI requires a cross-pol layer (HVHV/VHVH) "
-                              "and a co-pol layer (HHHH/VVVV)")
-        layers["hv"], layers["hh"] = cross, (co_h if co_h else co_v)
-        if co_h is not None and co_v is not None:
-            layers["vv"] = co_v
-    else:
-        return ProcessingResult(success=False,
-                                error_message="Unknown index id %r" % index_id)
+            error_message=("Product has no valid georeference for "
+                           "frequency%s; refusing to write a geo-referenced "
+                           "raster from it"
+                           % (frequency if frequency else "?")))
 
     # Determine formula (displayed to the user; real layer names).
     formula = ""
@@ -432,19 +493,17 @@ def compute_index_to_raster(handle: ProductHandle, index_id: str,
 
         band.FlushCache()
         exporter.finalize(ds)
-        del ds
+        ds = None
     except Exception as exc:
-        try:
-            del ds
-        except Exception:  # pragma: no cover
-            pass
+        ds = None
         return ProcessingResult(success=False, error_message=str(exc))
 
     return ProcessingResult(
         success=True,
         output_paths=[str(output_path)],
         metadata={"index": index_id, "formula": formula,
-                  "dtype": "Float32", "tile_size": tile_size},
+                  "dtype": "Float32", "tile_size": tile_size,
+                  "frequency": frequency},
     )
 
 
@@ -453,8 +512,10 @@ def _compute_tile(backend: NumpyProcessingBackend, reader, handle: ProductHandle
                   window: Tuple[int, int, int, int]) -> np.ndarray:
     """Compute one tile of the requested index (linear gamma0 in)."""
     def read(key):
-        data = np.asarray(reader.read_window(handle, layers[key].name, window),
-                          dtype=np.float64)
+        layer = layers[key]
+        data = np.asarray(
+            reader.read_window(handle, layer.layer_id or layer.name, window),
+            dtype=np.float64)
         if data.ndim == 3:
             data = data[0]
         return data

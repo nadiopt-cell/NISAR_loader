@@ -8,7 +8,7 @@ from typing import List, Optional, Tuple, Dict, Any
 
 import numpy as np
 
-from ..models import ProductHandle, LayerInfo, GeorefInfo
+from ..models import ProductHandle, GeorefInfo
 
 logger = logging.getLogger("nisar.readers")
 

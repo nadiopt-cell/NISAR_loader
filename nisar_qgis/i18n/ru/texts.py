@@ -114,6 +114,9 @@ I18N_RU = {
     "ui.download.started": "Скачивание запущено для сцен: {n}.",
     "ui.download.done": "Скачано: {path}",
     "ui.download.failed": "Ошибка скачивания: {error}",
+    "ui.download.no_space": "Недостаточно места на диске для {n} сцен(ы): нужно {needed} МБ, свободно {free} МБ.",
+    "ui.download.retry": "Повторить скачивание",
+    "ui.download.batch_errors": "Не удалось скачать {n} из {m}: {detail}",
     "ui.download.hint_netrc": (
         "Скачивание с ASF требует Earthdata Login. Настройте ~/.netrc:\n"
         "machine urs.earthdata.nasa.gov\n  login ВАШ_ЛОГИН_EDL\n"
@@ -129,6 +132,7 @@ I18N_RU = {
     "ui.open.col_pol": "Поляризация",
     "ui.open.col_units": "Единицы",
     "ui.open.col_size": "Размер (пикс.)",
+    "ui.open.col_freq": "Частота",
     "ui.open.add_selected": "Добавить выбранные слои в проект",
     "ui.open.no_file": "Сначала выберите файл NISAR (.h5).",
     "ui.open.open_failed": "Не удалось открыть продукт: {error}",
@@ -137,6 +141,7 @@ I18N_RU = {
         "Слои НЕ размещены на карте. Проверьте файл или обновите QGIS/GDAL."),
     "ui.open.beta_hint": "Статус продукта: {status}",
     "ui.open.added": "Добавлено слоёв: {n} (группа «{group}»).",
+    "ui.open.added_collision": "Слой {path} уже запланирован — пропуск.",
 
     # Processing tab
     "ui.process.title": "Пресеты для растительности",
@@ -149,6 +154,7 @@ I18N_RU = {
     "ui.process.done": "Вычислено {preset}: {path}",
     "ui.process.failed": "Ошибка обработки: {error}",
     "ui.process.requires": "Требуется: {req}",
+    "ui.process.frequency": "Частота решётки",
 
     # Export tab
     "ui.export.title": "Экспорт",

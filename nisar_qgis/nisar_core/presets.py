@@ -19,11 +19,38 @@ class PresetCategory(Enum):
     POLARIMETRY = "polarimetry"
 
 
+# Polarization classes (F2): real NISAR GCOV transmits either H (HHHH+HVHV)
+# or V (VVVV+VHVH); presets must not hard-depend on concrete layer names.
+CROSS_POL_POLARIZATIONS = ("HVHV", "VHVH")   # volume-scattering diagonal
+CO_POL_POLARIZATIONS = ("HHHH", "VVVV")      # surface-scattering diagonal
+FULL_POL_POLARIZATIONS = ("HHHH", "HVHV", "VVVV")
+
+
+def polarizations_of(handle) -> set:
+    """Polarization VALUE strings present in the handle (reload-safe)."""
+    pols = set()
+    for layer in (getattr(handle, "layers", None) or []):
+        pol = getattr(layer, "polarization", None)
+        value = getattr(pol, "value", None) if pol is not None else None
+        if value:
+            pols.add(value)
+    return pols
+
+
 @dataclass
 class PresetRequirement:
-    """Requirements for a preset to be available."""
+    """Requirements for a preset to be available (WP-2).
+
+    ``cross_pol_required`` / ``co_pol_required`` express POLARIZATION
+    CLASSES (HVHV or VHVH / HHHH or VVVV) instead of fixed layer names,
+    so V-transmit products (VHVH+VVVV, seen on real UR granules) get full
+    preset coverage (review finding F2). ``required_polarizations``
+    remains for presets that truly need exact terms.
+    """
     required_polarizations: List[Polarization] = field(default_factory=list)
     required_product_types: List[ProductType] = field(default_factory=list)
+    cross_pol_required: bool = False
+    co_pol_required: bool = False
     full_pol_required: bool = False
     min_layers: int = 1
 
@@ -79,28 +106,38 @@ class PresetInfo:
             return False, ("Product type %s is not supported (requires %s)"
                            % (handle.product_type.value, wanted))
 
-        # Check polarizations
-        available_pols = set()
-        for layer in handle.layers:
-            if layer.polarization:
-                available_pols.add(layer.polarization)
+        # Check polarizations (value strings survive module reloads)
+        available_pols = polarizations_of(handle)
 
         if not available_pols and handle.layers:
             return False, "No polarization layers found in the product"
 
         missing = []
         for pol in self.requirements.required_polarizations:
-            if pol not in available_pols:
-                missing.append(pol.value)
+            value = getattr(pol, "value", str(pol))
+            if value not in available_pols:
+                missing.append(value)
 
         if missing:
             return False, "Missing polarizations: %s" % ", ".join(missing)
 
+        # Polarization-class checks (WP-2 / F2)
+        if self.requirements.cross_pol_required and not (
+                set(CROSS_POL_POLARIZATIONS) & available_pols):
+            return False, ("Missing a cross-pol layer (HVHV or VHVH); "
+                           "found: %s"
+                           % (", ".join(sorted(available_pols)) or "none"))
+        if self.requirements.co_pol_required and not (
+                set(CO_POL_POLARIZATIONS) & available_pols):
+            return False, ("Missing a co-pol layer (HHHH or VVVV); "
+                           "found: %s"
+                           % (", ".join(sorted(available_pols)) or "none"))
+
         # Check full-pol
         if self.requirements.full_pol_required:
-            required_full = {Polarization.HHHH, Polarization.HVHV, Polarization.VVVV}
-            if not required_full.issubset(available_pols):
-                return False, "Full-pol data required (HHHH, HVHV, VVVV)"
+            if not set(FULL_POL_POLARIZATIONS).issubset(available_pols):
+                return False, ("Full-pol data required (HHHH, HVHV, VVVV; "
+                               "or V-transmit equivalents)")
 
         if len(handle.layers) < self.requirements.min_layers:
             return False, ("At least %d layers required (found %d)"
@@ -131,7 +168,7 @@ register_preset(PresetInfo(
     formula_key="preset.hv_db.formula",
     caveats_key="preset.hv_db.caveats",
     requirements=PresetRequirement(
-        required_polarizations=[Polarization.HVHV],
+        cross_pol_required=True,           # HVHV or VHVH (WP-2/F2)
         required_product_types=[ProductType.GCOV],
     ),
     output=PresetOutput(
@@ -159,7 +196,8 @@ register_preset(PresetInfo(
     formula_key="preset.cross_ratio.formula",
     caveats_key="preset.cross_ratio.caveats",
     requirements=PresetRequirement(
-        required_polarizations=[Polarization.HVHV, Polarization.HHHH],
+        cross_pol_required=True,           # HVHV or VHVH (WP-2/F2)
+        co_pol_required=True,              # HHHH or VVVV
         required_product_types=[ProductType.GCOV],
     ),
     output=PresetOutput(
@@ -187,9 +225,10 @@ register_preset(PresetInfo(
     formula_key="preset.rvi.formula",
     caveats_key="preset.rvi.caveats",
     requirements=PresetRequirement(
-        required_polarizations=[Polarization.HVHV, Polarization.HHHH],
+        cross_pol_required=True,           # HVHV or VHVH (WP-2/F2)
+        co_pol_required=True,              # HHHH or VVVV
         required_product_types=[ProductType.GCOV],
-        # VV optional for full-pol
+        # VVVV optional: switches to the full-pol formula when present
     ),
     output=PresetOutput(
         dtype="Float32",
@@ -250,7 +289,7 @@ register_preset(PresetInfo(
     formula_key="preset.change_db.formula",
     caveats_key="preset.change_db.caveats",
     requirements=PresetRequirement(
-        required_polarizations=[Polarization.HVHV],
+        cross_pol_required=True,           # HVHV or VHVH (WP-2/F2)
         required_product_types=[ProductType.GCOV],
         min_layers=1,
     ),

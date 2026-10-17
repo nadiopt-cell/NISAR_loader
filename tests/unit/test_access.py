@@ -1,11 +1,9 @@
 # -*- coding: utf-8 -*-
 """Unit tests for access backends: registries and status detection."""
-import pytest
 
 from nisar_qgis.nisar_core.access import (
     AccessRegistry, LocalFileBackend, DownloadProgress,
 )
-from nisar_qgis.nisar_core.access.base import BaseAccessBackend
 from nisar_qgis.nisar_core.models import SearchParameters, DataStatus
 
 

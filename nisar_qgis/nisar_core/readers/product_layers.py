@@ -14,7 +14,7 @@ against a real .h5 file — see docs/product_notes.md, "verification status").
 """
 from typing import Optional
 
-from ..models import Polarization, ProductType
+from ..models import Polarization
 
 # ---------------------------------------------------------------------------
 # Grid group bases (instrument-aware)

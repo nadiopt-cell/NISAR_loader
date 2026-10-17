@@ -6,8 +6,7 @@ GDAL is imported lazily: unit tests without GDAL still import this module
 and only export-related tests are skipped.
 """
 import logging
-from pathlib import Path
-from typing import Optional, Tuple, Dict, Any
+from typing import Optional, Dict, Any
 
 import numpy as np
 
@@ -28,7 +27,10 @@ except Exception:  # pragma: no cover - environment specific
     rasterio = None
     RASTERIO_AVAILABLE = False
 
-from ..models import ProductHandle, GeorefInfo, ProcessingResult
+from ..models import (
+    ProductHandle, GeorefInfo, ProcessingResult,
+    LayerNotFoundError, AmbiguousLayerError,
+)
 
 logger = logging.getLogger("nisar.processing.export")
 
@@ -167,9 +169,9 @@ class ExportBackend:
                 band.WriteArray(data[..., 0] if data.shape[0] != height
                                 else data[0])
             self.finalize(ds)
-            del ds
+            ds = None
         except Exception as exc:
-            del ds
+            ds = None
             return ProcessingResult(success=False, error_message=str(exc))
 
         return ProcessingResult(
@@ -267,26 +269,29 @@ class ExportBackend:
         from ..readers import ReaderRegistry
         from ..processing.indices import _tile_windows
 
-        layer = handle.get_layer(layer_name)
-        if not layer:
+        try:
+            layer = handle.get_layer(layer_name)
+        except AmbiguousLayerError as exc:
+            return ProcessingResult(success=False, error_message=str(exc))
+        except LayerNotFoundError:
             return ProcessingResult(
                 success=False,
                 error_message="Layer %r not found" % layer_name)
-        if handle.georef is None or not handle.georef.is_valid:
+
+        # WP-1: per-layer georef first (two-grid products: frequencyB has
+        # its own footprint), then the per-layer metadata copy, then the
+        # product-level primary grid.
+        georef = None
+        for candidate in (layer.georef, layer.metadata.get("georef"),
+                          handle.georef):
+            if candidate is not None and getattr(candidate, "is_valid", False):
+                georef = candidate
+                break
+        if georef is None:
             return ProcessingResult(
                 success=False,
-                error_message=("Cannot export %r: the product has no valid "
-                               "georeference" % layer_name))
-
-        # GUNW products carry two grids (80 m / 20 m): a layer may bring
-        # its own georef copy in metadata — prefer it over the handle's.
-        georef = handle.georef
-        try:
-            layer_georef = layer.metadata.get("georef")
-        except Exception:  # pragma: no cover - defensive
-            layer_georef = None
-        if layer_georef is not None and getattr(layer_georef, "is_valid", False):
-            georef = layer_georef
+                error_message=("Cannot export %r: no valid georeference "
+                               "for this layer" % layer_name))
 
         try:
             _require_gdal()
@@ -319,7 +324,7 @@ class ExportBackend:
                     return ProcessingResult(
                         success=False, error_message="Cancelled by user")
                 tile = np.asarray(
-                    reader.read_window(handle, layer.name,
+                    reader.read_window(handle, layer.layer_id or layer.name,
                                        (xoff, yoff, xsize, ysize)),
                     dtype=np.float32)
                 if tile.ndim == 3:
@@ -334,12 +339,9 @@ class ExportBackend:
                     except Exception:  # pragma: no cover
                         pass
             self.finalize(ds)
-            del ds
+            ds = None
         except Exception as exc:
-            try:
-                del ds
-            except Exception:  # pragma: no cover
-                pass
+            ds = None
             return ProcessingResult(success=False, error_message=str(exc))
 
         return ProcessingResult(

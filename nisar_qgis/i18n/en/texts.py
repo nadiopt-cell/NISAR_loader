@@ -114,6 +114,9 @@ I18N_EN = {
     "ui.download.started": "Download started for {n} scene(s).",
     "ui.download.done": "Downloaded: {path}",
     "ui.download.failed": "Download failed: {error}",
+    "ui.download.no_space": "Not enough disk space for {n} scene(s): need {needed} MB, free {free} MB.",
+    "ui.download.retry": "Retry download",
+    "ui.download.batch_errors": "Download failed for {n} of {m}: {detail}",
     "ui.download.hint_netrc": (
         "ASF downloads require Earthdata Login. Configure ~/.netrc:\n"
         "machine urs.earthdata.nasa.gov\n  login YOUR_EDL_USER\n"
@@ -129,6 +132,7 @@ I18N_EN = {
     "ui.open.col_pol": "Polarization",
     "ui.open.col_units": "Units",
     "ui.open.col_size": "Size (px)",
+    "ui.open.col_freq": "Frequency",
     "ui.open.add_selected": "Add selected layers to project",
     "ui.open.no_file": "Select a NISAR .h5 file first.",
     "ui.open.open_failed": "Could not open the product: {error}",
@@ -138,6 +142,7 @@ I18N_EN = {
         "QGIS/GDAL."),
     "ui.open.beta_hint": "Product status: {status}",
     "ui.open.added": "Added {n} layer(s) to the project group '{group}'.",
+    "ui.open.added_collision": "Layer {path} is already scheduled - skipped.",
 
     # Processing tab
     "ui.process.title": "Vegetation presets",
@@ -150,6 +155,7 @@ I18N_EN = {
     "ui.process.done": "Computed {preset}: {path}",
     "ui.process.failed": "Processing failed: {error}",
     "ui.process.requires": "Requires: {req}",
+    "ui.process.frequency": "Grid frequency",
 
     # Export tab
     "ui.export.title": "Export",

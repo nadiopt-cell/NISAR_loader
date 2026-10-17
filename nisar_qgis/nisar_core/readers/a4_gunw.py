@@ -35,7 +35,7 @@ from .a3_h5py import _as_text, _EPSG_FROM_WKT, _URN_EPSG, _AUTH_EPSG
 from . import product_layers as PL
 from ..models import (
     ProductHandle, LayerInfo, GeorefInfo, DataStatus, ProductType,
-    Polarization,
+    Polarization, frequency_letter_from_label, resolve_layer,
 )
 
 logger = logging.getLogger("nisar.readers.a4")
@@ -88,6 +88,7 @@ class A4GunwH5PyReader(BaseReader):
                 gref = layer_georefs.get(layer.metadata.get("group"))
                 if gref is not None:
                     layer.metadata["georef"] = gref
+                    layer.georef = gref  # WP-1: first-class per-layer georef
 
             handle = ProductHandle(
                 source_path=path,
@@ -207,6 +208,7 @@ class A4GunwH5PyReader(BaseReader):
                 "pol": pol,
                 "dataset": dataset_name,
             },
+            frequency=frequency_letter_from_label(PL.GUNW_FREQ),
         )
 
     # ------------------------------------------------------------- georef
@@ -368,14 +370,7 @@ class A4GunwH5PyReader(BaseReader):
             h5 = h5py.File(handle.source_path, "r")
             handle._h5_file = h5
 
-        layer = None
-        for candidate in handle.layers:
-            if candidate.name == layer_name or candidate.path.endswith(layer_name):
-                layer = candidate
-                break
-        if layer is None:
-            raise ValueError("Layer %r not found in %s" % (layer_name,
-                                                            handle.source_path))
+        layer = resolve_layer(handle, layer_name)
 
         dataset = h5.get(layer.path)
         if dataset is None:
