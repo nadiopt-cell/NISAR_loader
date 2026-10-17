@@ -197,3 +197,9 @@ into the local dev Python for the run (optional plugin dependency,
 degrades gracefully without it).
 
 Acceptance item >= 5 GB / peak-RSS still open (this granule is 2 GB).
+### Post-live micro-fix (17.10.2026)
+
+`apply_fill_nodata()` in export.py: explicit NaN-fill handling (the
+old `tile == fill` branch was a no-op for NaN `_FillValue`), 3 unit +
+1 GDAL-guarded e2e test. No scientific values changed; outcome on real
+granules identical. CI green on 93fa899 (PR #3).
