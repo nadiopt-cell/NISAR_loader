@@ -148,3 +148,58 @@ First `ci` runs on the WP series (cdb9c30 / merge 2d8c686) failed:
 3. `version` job: `No module named pytest` - the job ran the version
    consistency test without installing anything. Fix: install step
    with pytest added.
+
+## Integration run, QGIS 3.44.11 (17.10.2026, post v0.4.0)
+
+Headless acceptance on the merged main (with synthetic GCOV/GUNW
+products): all 5 nisar:* algorithms ran via qgis_process;
+CRS/dtype/units verified with rasterio; GUI smoke + API probes done
+inside the running QGIS python. Full record:
+`tests/qgis/README.md`.
+
+[ПРОВЕРИТЬ] closed on this run:
+- `QgsVectorFileWriter.create()` with the Qt5/Qt6 chain - works
+  (Qt 5.15.13 -> QMetaType.Int; Qt6/QGIS 4.x still untested).
+- `QgsSettings proxy/*` key names - round-trip ok in the installed
+  QGIS (they are the native QGIS options keys).
+- `bbox_wgs84_from_georef` OSR branch - matches pyproj 3.7.1 oracle
+  to 7 decimals.
+- Two-frequency (frequencyB/UR clone) export - correct EPSG:32605
+  after fixing a malformed WKT in the synthetic fixture (real
+  granules never hit this - their WKT carries the authority inside
+  the UNIT element).
+
+[ПРОВЕРИТЬ] still open:
+- IDR driver NISAR in OSGeo4W GDAL 3.13.0: `GetDriverByName("NISAR")`
+  is None - A1 backend unavailable there; across-the-board A2 opens
+  the products but cannot georeference them (as expected); auto
+  falls back to A3 (h5py). Local QGIS must get h5py via the
+  PYTHONPATH wheel trick (tests/qgis/README.md) to have a working
+  reader at all.
+- QgsAuthManager -> EDL wiring (authcfg card in the dialog) remains
+  unimplemented by design (WP-3 token comes from config/env); token
+  persistence in settings verified ABSENT.
+- GUI runtime paths (download queue, retry menu, disk-space bar) are
+  construct-only here; live acceptance still needs a real download
+  session with EDL credentials.
+## Live search/download/open acceptance (17.10.2026, real granule)
+
+First full end-to-end run of the plugin's own access stack with a real
+EDL token: B2 search (27 PROVISIONAL GCOV scenes, Kostroma AOI),
+DownloadManager (4 range-parallel parts, ~3.5 MB/s, atomic stitch,
+exact size match), A3 read of the REAL two-frequency product
+(EPSG:32638, A=20 m / B=80 m grids), hv_db + rvi algorithms in QGIS
+3.44.11 on the 2 GB real granule (Float32 GeoTIFF, correct CRS), the
+ambiguous `HVHV` key honestly refused (F14) on real data, frequencyB
+export verified against the 20 m statistics. Record in
+`tests/qgis/README.md`. Dependency note: `asf_search` 14.1.0 installed
+into the local dev Python for the run (optional plugin dependency,
+degrades gracefully without it).
+
+Acceptance item >= 5 GB / peak-RSS still open (this granule is 2 GB).
+### Post-live micro-fix (17.10.2026)
+
+`apply_fill_nodata()` in export.py: explicit NaN-fill handling (the
+old `tile == fill` branch was a no-op for NaN `_FillValue`), 3 unit +
+1 GDAL-guarded e2e test. No scientific values changed; outcome on real
+granules identical. CI green on 93fa899 (PR #3).

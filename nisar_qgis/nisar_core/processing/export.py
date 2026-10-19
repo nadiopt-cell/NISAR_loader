@@ -55,6 +55,25 @@ def _require_gdal():
             "GDAL, e.g. 'pip install gdal' or use a conda gdal package.")
 
 
+def apply_fill_nodata(tile: np.ndarray, fill, apply_mask: bool = True
+                      ) -> np.ndarray:
+    """Map a layer's ``_FillValue`` to NaN (WP-8, live-acceptance 17.10.2026).
+
+    Works for both finite fills (``tile == fill``) and NaN fills:
+    a plain ``tile == fill`` comparison is a no-op when ``fill`` is NaN
+    (NaN != NaN), which real GCOV products use. ''tile'' must be
+    Float32 as produced by :meth:`ExportBackend.read_window`.
+    No scientific values are modified beyond the fill mapping.
+    """
+    if not apply_mask or fill is None:
+        return tile
+    fill = float(fill)
+    if np.isnan(fill):
+        # NaN nodata: the mask IS the data comparison itself.
+        return np.where(np.isnan(tile), np.nan, tile)
+    return np.where(tile == fill, np.nan, tile)
+
+
 class ExportBackend:
     """Export arrays / layers to GeoTIFF or COG."""
 
@@ -329,8 +348,7 @@ class ExportBackend:
                     dtype=np.float32)
                 if tile.ndim == 3:
                     tile = tile[0]
-                if apply_mask and fill is not None and np.isfinite(fill):
-                    tile = np.where(tile == fill, np.nan, tile)
+                tile = apply_fill_nodata(tile, fill, apply_mask=apply_mask)
                 band.WriteArray(tile, xoff, yoff)
                 done += 1
                 if progress_callback is not None:
